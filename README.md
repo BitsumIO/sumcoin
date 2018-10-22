@@ -86,7 +86,7 @@ SumCoin builds for all operating systems out of the same codebase. Follow the OS
 
 #### Linux
 ```shell
-git clone https://github.com/BitSum/sumcoin
+git clone https://github.com/BitsumIO/sumcoin
 cd sumcoin
 #you might want to: git checkout <branch>; git pull
 ./zcutil/fetch-params.sh
@@ -115,7 +115,7 @@ time after this 16 week time period. The automatic feature is based on block
 height.
 
 #Older Komodo Details
-The remaining text is from the komodo source we forked when creating BitSum/sumcoin.
+The remaining text is from the komodo source we forked when creating BitsumIO/sumcoin.
 
 **To change modes:**
 

@@ -22,7 +22,7 @@ brew tap discoteq/discoteq; brew install flock autoconf autogen automake gcc@6 b
 Get all that installed, then run:
 
 ```shell
-git clone https://github.com/BitSum/sumcoin.git
+git clone https://github.com/BitsumIO/sumcoin.git
 cd sumcoin
 ./zcutil/build-mac.sh
 ./zcutil/fetch-params.sh
