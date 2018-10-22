@@ -72,7 +72,6 @@ testScripts=(
     'p2p_txexpiry_dos.py'
     'p2p_node_bloom.py'
     'regtest_signrawtransaction.py'
-    'finalsaplingroot.py'
 );
 testScriptsExt=(
     'getblocktemplate_longpoll.py'

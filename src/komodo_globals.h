@@ -29,7 +29,6 @@ uint64_t komodo_paxtotal();
 int32_t komodo_longestchain();
 uint64_t komodo_maxallowed(int32_t baseid);
 int32_t komodo_bannedset(int32_t *indallvoutsp,uint256 *array,int32_t max);
-bool pubkey2addr(char *destaddr,uint8_t *pubkey33);
 
 pthread_mutex_t komodo_mutex;
 
@@ -53,7 +52,7 @@ bool VERUS_MINTBLOCKS;
 
 char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN],ASSETCHAINS_USERPASS[4096];
 uint16_t ASSETCHAINS_P2PPORT,ASSETCHAINS_RPCPORT;
-uint32_t ASSETCHAIN_INIT,ASSETCHAINS_CC,KOMODO_STOPAT,KOMODO_DPOWCONFS = 1;
+uint32_t ASSETCHAIN_INIT,ASSETCHAINS_CC,KOMODO_STOPAT;
 uint32_t ASSETCHAINS_MAGIC = 2387029918;
 int64_t ASSETCHAINS_GENESISTXVAL = 5000000000;
 
