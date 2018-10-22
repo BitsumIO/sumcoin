@@ -22,13 +22,13 @@ brew tap discoteq/discoteq; brew install flock autoconf autogen automake gcc@6 b
 Get all that installed, then run:
 
 ```shell
-git clone https://github.com/VerusCoin/VerusCoin.git
-cd VerusCoin
+git clone https://github.com/BitSum/sumcoin.git
+cd sumcoin
 ./zcutil/build-mac.sh
 ./zcutil/fetch-params.sh
 ```
 
-To build a distributable version of VerusCoin then run the makeReleaseMac.sh script after building. This will fix the dependency references and move the komodod and komodo-cli binaries to the kmd/mac/verus-cli directory along with the 6 libraries required for it to work properly.
+To build a distributable version of sumcoin then run the makeReleaseMac.sh script after building. This will fix the dependency references and move the komodod and komodo-cli binaries to the kmd/mac/verus-cli directory along with the 6 libraries required for it to work properly.
 
 When you are done building, you need to create `Komodo.conf` the Mac way. 
 

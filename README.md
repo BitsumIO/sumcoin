@@ -1,19 +1,19 @@
-## VerusCoin version 0.4.0b
+## SumCoin version 0.4.0b
 
-VerusCoin is a new, mineable and stakeable cryptocurrency. It is a live fork of Komodo that retains its Zcash lineage and improves it. VerusCoin will leverage the Komodo platform and dPoW notarization for enhanced security and cross-chain interoperability. We have added a variation of a zawy12, lwma difficulty algorithm, a new CPU-optimized hash algorithm and a new algorithm for fair proof of stake. We describe these changes and vision going forward in a [our Phase I white paper](http://185.25.51.16/papers/VerusPhaseI.pdf) and [our Vision](http://185.25.51.16/papers/VerusVision.pdf).
-- [VerusCoin web site https://veruscoin.io/ Wallets and CLI tools](https://veruscoin.io/)
-- [VerusCoin Explorer](https://explorer.veruscoin.io/)
+SumCoin is a new, mineable and stakeable cryptocurrency. It is a live fork of Komodo that retains its Zcash lineage and improves it. SumCoin will leverage the Komodo platform and dPoW notarization for enhanced security and cross-chain interoperability. We have added a variation of a zawy12, lwma difficulty algorithm, a new CPU-optimized hash algorithm and a new algorithm for fair proof of stake.
+- [BitSum web site https://bitsum.io/ Wallets and CLI tools](https://bitsum.io/)
+- [SumCoin Explorer](https://explorer.bitsum.io/)
 
 
 ## Komodo with Bitcore
 This version of Komodo contains Bitcore support for komodo and all its assetchains.
 
 ## Komodod
-This software is the VerusCoin enhanced Komodo client. Generally, you will use this if you want to mine VRSC or setup a full node. When you run the wallet it launches komodod automatically. On first launch it downloads Zcash parameters, roughly 1GB, which is mildly slow.
+This software is the SumCoin enhanced Komodo client. Generally, you will use this if you want to mine VRSC or setup a full node. When you run the wallet it launches komodod automatically. On first launch it downloads Zcash parameters, roughly 1GB, which is mildly slow.
 The wallet downloads and stores the block chain or asset chain of the coin you select. It downloads and stores the entire history of the coins transactions; depending on the speed of your computer and network connection, the synchronization process could take a day or more once the blockchain has reached a significant size.
 
 ## Development Resources
-- VerusCoin:[https://veruscoin.io/](https://veruscoin.io/) Wallets and CLI tools
+- SumCoin:[https://bitsum.io/](https://bitsum.io/) Wallets and CLI tools
 - Komodo Web: [https://komodoplatform.com/](https://komodoplatform.com/)
 - Organization web: [https://komodoplatform.com/](https://komodoplatform.com/)
 - Forum: [https://forum.komodoplatform.com/](https://forum.komodoplatform.com/)
@@ -78,16 +78,16 @@ Building for Windows:
 ```
 ./zcutil/build-win.sh
 ```
-VerusCoin
-------
-We develop on dev and some other branches and produce releases of of the master branch, using pull requests to manage what goes into master. The dev branch is considered the bleeding edge codebase, and may even be oncompatible from time to time, while the master-branch is considered tested (unit tests, runtime tests, functionality). At no point of time do the Komodo Platform developers or Verus Developers take any responsbility for any damage out of the usage of this software. 
+SumCoin
+-------
+We develop on dev and some other branches and produce releases of of the master branch, using pull requests to manage what goes into master. The dev branch is considered the bleeding edge codebase, and may even be oncompatible from time to time, while the master-branch is considered tested (unit tests, runtime tests, functionality). At no point of time do the Komodo Platform developers or BitSUM Developers take any responsbility for any damage out of the usage of this software. 
 
-Verus builds for all operating systems out of the same codebase. Follow the OS specific instructions from below.
+SumCoin builds for all operating systems out of the same codebase. Follow the OS specific instructions from below.
 
 #### Linux
 ```shell
-git clone https://github.com/VerusCoin/VerusCoin
-cd VerusCoin
+git clone https://github.com/BitSum/sumcoin
+cd sumcoin
 #you might want to: git checkout <branch>; git pull
 ./zcutil/fetch-params.sh
 # -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
@@ -95,7 +95,7 @@ cd VerusCoin
 #This can take some time.
 ```
 
-**The VerusCoin enhanced komodo is experimental and a work-in-progress.** Use at your own risk.
+**The SumCoin enhanced komodo is experimental and a work-in-progress.** Use at your own risk.
 
 
 #To view komodod output:
@@ -115,7 +115,7 @@ time after this 16 week time period. The automatic feature is based on block
 height.
 
 #Older Komodo Details
-The remaining text is from the komodo source we forked when creating VerusCoin/Veruscoin.
+The remaining text is from the komodo source we forked when creating BitSum/sumcoin.
 
 **To change modes:**
 
