@@ -9,7 +9,7 @@ SumCoin is a new, mineable and stakeable cryptocurrency. It is a live fork of Ko
 This version of Komodo contains Bitcore support for komodo and all its assetchains.
 
 ## Komodod
-This software is the SumCoin enhanced Komodo client. Generally, you will use this if you want to mine VRSC or setup a full node. When you run the wallet it launches komodod automatically. On first launch it downloads Zcash parameters, roughly 1GB, which is mildly slow.
+This software is the SumCoin enhanced Komodo client. Generally, you will use this if you want to mine SUM or setup a full node. When you run the wallet it launches komodod automatically. On first launch it downloads Zcash parameters, roughly 1GB, which is mildly slow.
 The wallet downloads and stores the block chain or asset chain of the coin you select. It downloads and stores the entire history of the coins transactions; depending on the speed of your computer and network connection, the synchronization process could take a day or more once the blockchain has reached a significant size.
 
 ## Development Resources
@@ -80,7 +80,7 @@ Building for Windows:
 ```
 SumCoin
 -------
-We develop on dev and some other branches and produce releases of of the master branch, using pull requests to manage what goes into master. The dev branch is considered the bleeding edge codebase, and may even be oncompatible from time to time, while the master-branch is considered tested (unit tests, runtime tests, functionality). At no point of time do the Komodo Platform developers or BitSUM Developers take any responsbility for any damage out of the usage of this software. 
+We develop on dev and some other branches and produce releases of of the master branch, using pull requests to manage what goes into master. The dev branch is considered the bleeding edge codebase, and may even be oncompatible from time to time, while the master-branch is considered tested (unit tests, runtime tests, functionality). At no point of time do the Komodo Platform developers or BitSUM Developers take any responsbility for any damage out of the usage of this software.
 
 SumCoin builds for all operating systems out of the same codebase. Follow the OS specific instructions from below.
 
@@ -100,8 +100,8 @@ cd sumcoin
 
 #To view komodod output:
 tail -f ~/.komodo/debug.log
-#To view VRSC output:
-tail -f ~/.komodo/VRSC/debug.log
+#To view SUM output:
+tail -f ~/.komodo/SUM/debug.log
 Note that this directory is correct for Linux, not Mac or Windows
 #To view all command
 ./src/komodo-cli help
@@ -129,7 +129,7 @@ For example:
 ./verusd -exportdir=/tmp &
 ./verus dumpwallet example
 ./verus stop
-mv ~/.komodo/VRSC ~/.komodo/VRSC.old && mkdir ~/.komodo/VRSC && cp ~/.komodo/VRSC.old/VRSC.conf ~/.komodo/VRSC.old/peers.dat ~/.komodo/VRSC
+mv ~/.komodo/SUM ~/.komodo/SUM.old && mkdir ~/.komodo/SUM && cp ~/.komodo/SUM.old/SUM.conf ~/.komodo/SUM.old/peers.dat ~/.komodo/SUM
 ./verusd -exchange -exportdir=/tmp &
 ./verus importwallet /tmp/example
 ```
