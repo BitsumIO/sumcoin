@@ -843,6 +843,10 @@ bool EvalScript(
                     }
                     bool fSuccess = checker.CheckSig(vchSig, vchPubKey, script, consensusBranchId);
 
+                    // comment below when not debugging
+                    //printf("OP_CHECKSIG: scriptSig.%s\nscriptPubKey.%s\nbranchid.%x, success: %s\n", 
+                    //       CScript(vchSig).ToString().c_str(), CScript(vchPubKey).ToString().c_str(), consensusBranchId, (fSuccess ? "true" : "false"));
+
                     popstack(stack);
                     popstack(stack);
                     stack.push_back(fSuccess ? vchTrue : vchFalse);
@@ -952,7 +956,7 @@ bool EvalScript(
 
                     if (stack.size() < 2)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-//fprintf(stderr,"check cryptocondition\n");
+                    //fprintf(stderr,"check cryptocondition\n");
                     int fResult = checker.CheckCryptoCondition(stacktop(-1), stacktop(-2), script, consensusBranchId);
                     if (fResult == -1) {
                         return set_error(serror, SCRIPT_ERR_CRYPTOCONDITION_INVALID_FULFILLMENT);
@@ -1350,8 +1354,9 @@ int TransactionSignatureChecker::CheckCryptoCondition(
     if (ffillBin.empty())
         return false;
 
-    CC *cond = cc_readFulfillmentBinary((unsigned char*)ffillBin.data(), ffillBin.size()-1);
-    if (!cond) return -1;
+    CC *cond;
+    int error = cc_readFulfillmentBinaryExt((unsigned char*)ffillBin.data(), ffillBin.size()-1, &cond);
+    if (error || !cond) return -1;
 
     if (!IsSupportedCryptoCondition(cond)) return 0;
     if (!IsSignedCryptoCondition(cond)) return 0;
@@ -1359,7 +1364,7 @@ int TransactionSignatureChecker::CheckCryptoCondition(
     uint256 sighash;
     int nHashType = ffillBin.back();
     try {
-        sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, consensusBranchId, this->txdata);
+        sighash = SignatureHash(CCPubKey(cond), *txTo, nIn, nHashType, amount, consensusBranchId, this->txdata);
     } catch (logic_error ex) {
         return 0;
     }
@@ -1387,8 +1392,8 @@ int TransactionSignatureChecker::CheckCryptoCondition(
 
 int TransactionSignatureChecker::CheckEvalCondition(const CC *cond) const
 {
-    fprintf(stderr, "Cannot check crypto-condition Eval outside of server\n");
-    return 0;
+    //fprintf(stderr, "Cannot check crypto-condition Eval outside of server, returning true in pre-checks\n");
+    return true;
 }
 
 
@@ -1495,9 +1500,15 @@ bool VerifyScript(
         // serror is set
         return false;
     if (stack.empty())
+    {
+        //printf("interpreter stack is empty, comment this debugging message\nscriptSig: %s\nscriptPubKey: %s\n",scriptSig.ToString().c_str(),scriptPubKey.ToString().c_str());
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
+    }
     if (CastToBool(stack.back()) == false)
+    {
+        //printf("false return value, comment this debugging message\nscriptSig: %s\nscriptPubKey: %s\n",scriptSig.ToString().c_str(),scriptPubKey.ToString().c_str());
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
+    }
 
     // Additional validation for spend-to-script-hash transactions:
     if ((flags & SCRIPT_VERIFY_P2SH) && scriptPubKey.IsPayToScriptHash())
@@ -1522,9 +1533,15 @@ bool VerifyScript(
             // serror is set
             return false;
         if (stack.empty())
+        {
+            //printf("interpreter stack is empty #2, comment this debugging message\nscriptSig: %s\nscriptPubKey: %s\n",scriptSig.ToString().c_str(),scriptPubKey.ToString().c_str());
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
+        }
         if (!CastToBool(stack.back()))
+        {
+            //printf("false return value #2, comment this debugging message\nscriptSig: %s\nscriptPubKey: %s\n",scriptSig.ToString().c_str(),scriptPubKey.ToString().c_str());
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
+        }
     }
 
     // The CLEANSTACK check is only performed after potential P2SH evaluation,

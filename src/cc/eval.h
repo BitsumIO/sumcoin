@@ -38,6 +38,7 @@
  * after the code is interpreted as a bitcoin script.
  */
 #define FOREACH_EVAL(EVAL)             \
+        EVAL(EVAL_STAKEGUARD, 0x1)  \
         EVAL(EVAL_IMPORTPAYOUT, 0xe1)  \
         EVAL(EVAL_IMPORTCOIN,   0xe2)  \
         EVAL(EVAL_ASSETS,   0xe3)  \
@@ -174,7 +175,7 @@ public:
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+    inline void SerializationOp(Stream& s, Operation ser_action) {
 
         bool IsBack = IsBackNotarisation;
         if (2 == IsBackNotarisation) IsBack = DetectBackNotarisation(s, ser_action);
@@ -270,7 +271,7 @@ public:
     ADD_SERIALIZE_METHODS;
     
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+    inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(VARINT(nIndex));
         READWRITE(branch);
     }

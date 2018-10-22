@@ -60,7 +60,10 @@ void TransactionBuilder::AddSaplingOutput(
 void TransactionBuilder::AddTransparentInput(COutPoint utxo, CScript scriptPubKey, CAmount value)
 {
     if (keystore == nullptr) {
-        throw std::runtime_error("Cannot add transparent inputs to a TransactionBuilder without a keystore");
+        if (!scriptPubKey.IsPayToCryptoCondition())
+        {
+            throw std::runtime_error("Cannot add transparent inputs to a TransactionBuilder without a keystore, except with crypto conditions");
+        }
     }
 
     mtx.vin.emplace_back(utxo);
@@ -77,6 +80,23 @@ bool TransactionBuilder::AddTransparentOutput(CTxDestination& to, CAmount value)
     CTxOut out(value, scriptPubKey);
     mtx.vout.push_back(out);
     return true;
+}
+
+bool TransactionBuilder::AddOpRetLast()
+{
+    CScript s;
+    if (opReturn)
+    {
+        s = opReturn.value();
+        CTxOut out(0, s);
+        mtx.vout.push_back(out);
+    }
+    return true;
+}
+
+void TransactionBuilder::AddOpRet(CScript &s)
+{
+    opReturn.emplace(CScript(s));
 }
 
 void TransactionBuilder::SetFee(CAmount fee)
@@ -229,6 +249,9 @@ boost::optional<CTransaction> TransactionBuilder::Build()
             encryptor);
         mtx.vShieldedOutput.push_back(odesc);
     }
+
+    // add op_return if there is one to add
+    AddOpRetLast();
 
     //
     // Signatures

@@ -34,6 +34,14 @@ public:
         return EncodeBase58Check(data);
     }
 
+    std::string operator()(const CPubKey& key) const
+    {
+        std::vector<unsigned char> data = m_params.Base58Prefix(CChainParams::PUBKEY_ADDRESS);
+        CKeyID id = key.GetID();
+        data.insert(data.end(), id.begin(), id.end());
+        return EncodeBase58Check(data);
+    }
+
     std::string operator()(const CScriptID& id) const
     {
         std::vector<unsigned char> data = m_params.Base58Prefix(CChainParams::SCRIPT_ADDRESS);
@@ -300,8 +308,8 @@ libzcash::PaymentAddress DecodePaymentAddress(const std::string& str)
     return libzcash::InvalidEncoding();
 }
 
-bool IsValidPaymentAddressString(const std::string& str) {
-    return IsValidPaymentAddress(DecodePaymentAddress(str));
+bool IsValidPaymentAddressString(const std::string& str, uint32_t consensusBranchId) {
+    return IsValidPaymentAddress(DecodePaymentAddress(str), consensusBranchId);
 }
 
 std::string EncodeViewingKey(const libzcash::ViewingKey& vk)

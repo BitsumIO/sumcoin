@@ -15,6 +15,8 @@
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 
+using namespace libzcash;
+
 bool CCrypter::SetKeyFromPassphrase(const SecureString& strKeyData, const std::vector<unsigned char>& chSalt, const unsigned int nRounds, const unsigned int nDerivationMethod)
 {
     if (nRounds < 1 || chSalt.size() != WALLET_CRYPTO_SALT_SIZE)

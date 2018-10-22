@@ -33,8 +33,10 @@
 
 using namespace std;
 
+extern int32_t ASSETCHAINS_ALGO, ASSETCHAINS_EQUIHASH, ASSETCHAINS_LWMAPOS;
 extern uint64_t ASSETCHAINS_STAKED;
 extern int32_t KOMODO_MININGTHREADS;
+extern bool VERUS_MINTBLOCKS;
 arith_uint256 komodo_PoWtarget(int32_t *percPoSp,arith_uint256 target,int32_t height,int32_t goalperc);
 
 /**
@@ -48,7 +50,7 @@ int64_t GetNetworkHashPS(int lookup, int height) {
     if (height >= 0 && height < chainActive.Height())
         pb = chainActive[height];
 
-    if (pb == NULL || !pb->nHeight)
+    if (pb == NULL || !pb->GetHeight())
         return 0;
 
     // If lookup is nonpositive, then use difficulty averaging window.
@@ -56,8 +58,8 @@ int64_t GetNetworkHashPS(int lookup, int height) {
         lookup = Params().GetConsensus().nPowAveragingWindow;
 
     // If lookup is larger than chain, then set it to chain length.
-    if (lookup > pb->nHeight)
-        lookup = pb->nHeight;
+    if (lookup > pb->GetHeight())
+        lookup = pb->GetHeight();
 
     CBlockIndex *pb0 = pb;
     int64_t minTime = pb0->GetBlockTime();
@@ -73,7 +75,7 @@ int64_t GetNetworkHashPS(int lookup, int height) {
     if (minTime == maxTime)
         return 0;
 
-    arith_uint256 workDiff = pb->nChainWork - pb0->nChainWork;
+    arith_uint256 workDiff = pb->chainPower.chainWork - pb0->chainPower.chainWork;
     int64_t timeDiff = maxTime - minTime;
 
     return (int64_t)(workDiff.getdouble() / timeDiff);
@@ -143,23 +145,32 @@ UniValue getnetworkhashps(const UniValue& params, bool fHelp)
 }
 
 #ifdef ENABLE_MINING
+extern bool VERUS_MINTBLOCKS;
 UniValue getgenerate(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
             "getgenerate\n"
-            "\nReturn if the server is set to generate coins or not. The default is false.\n"
-            "It is set with the command line argument -gen (or komodo.conf setting gen)\n"
+            "\nReturn if the server is set to mine and/or mint coins or not. The default is false.\n"
+            "It is set with the command line argument -gen (or komodo.conf setting gen) and -mint\n"
             "It can also be set with the setgenerate call.\n"
             "\nResult\n"
-            "true|false      (boolean) If the server is set to generate coins or not\n"
+            "{\n"
+            "  \"staking\": true|false      (boolean) If staking is on or off (see setgenerate)\n"
+            "  \"generate\": true|false     (boolean) If mining is on or off (see setgenerate)\n"
+            "  \"numthreads\": n            (numeric) The processor limit for mining. (see setgenerate)\n"
+            "}\n"
             "\nExamples:\n"
             + HelpExampleCli("getgenerate", "")
             + HelpExampleRpc("getgenerate", "")
         );
 
     LOCK(cs_main);
-    return GetBoolArg("-gen", false);
+    UniValue obj(UniValue::VOBJ);
+    obj.push_back(Pair("staking",          VERUS_MINTBLOCKS));
+    obj.push_back(Pair("generate",         GetBoolArg("-gen", false)));
+    obj.push_back(Pair("numthreads",       (int64_t)KOMODO_MININGTHREADS));
+    return obj;
 }
 
 extern uint8_t NOTARY_PUBKEY33[33];
@@ -262,7 +273,7 @@ UniValue generate(const UniValue& params, bool fHelp)
                 LOCK(cs_main);
                 pblock->nSolution = soln;
                 solutionTargetChecks.increment();
-                return CheckProofOfWork(chainActive.Height(),NOTARY_PUBKEY33,pblock->GetHash(), pblock->nBits, Params().GetConsensus(),pblock->nTime);
+                return CheckProofOfWork(*pblock,NOTARY_PUBKEY33,chainActive.Height(),Params().GetConsensus());
             };
             bool found = EhBasicSolveUncancellable(n, k, curr_state, validBlock);
             ehSolverRuns.increment();
@@ -272,7 +283,7 @@ UniValue generate(const UniValue& params, bool fHelp)
         }
 endloop:
         CValidationState state;
-        if (!ProcessNewBlock(1,chainActive.LastTip()->nHeight+1,state, NULL, pblock, true, NULL))
+        if (!ProcessNewBlock(1,chainActive.LastTip()->GetHeight()+1,state, NULL, pblock, true, NULL))
             throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
         ++nHeight;
         blockHashes.push_back(pblock->GetHash().GetHex());
@@ -286,18 +297,20 @@ UniValue setgenerate(const UniValue& params, bool fHelp)
     if (fHelp || params.size() < 1 || params.size() > 2)
         throw runtime_error(
             "setgenerate generate ( genproclimit )\n"
-            "\nSet 'generate' true or false to turn generation on or off.\n"
-            "Generation is limited to 'genproclimit' processors, -1 is unlimited.\n"
+            "\nSet 'generate' true to turn either mining/generation or minting/staking on and false to turn both off.\n"
+            "Mining is limited to 'genproclimit' processors, -1 is unlimited, setgenerate true with 0 genproclimit turns on staking\n"
             "See the getgenerate call for the current setting.\n"
             "\nArguments:\n"
             "1. generate         (boolean, required) Set to true to turn on generation, off to turn off.\n"
-            "2. genproclimit     (numeric, optional) Set the processor limit for when generation is on. Can be -1 for unlimited.\n"
+            "2. genproclimit     (numeric, optional) Set processor limit when generation is on. Can be -1 for unlimited, 0 to turn on staking.\n"
             "\nExamples:\n"
             "\nSet the generation on with a limit of one processor\n"
             + HelpExampleCli("setgenerate", "true 1") +
+            "\nTurn minting/staking on\n"
+            + HelpExampleCli("setgenerate", "true 0") +
             "\nCheck the setting\n"
             + HelpExampleCli("getgenerate", "") +
-            "\nTurn off generation\n"
+            "\nTurn off generation and minting\n"
             + HelpExampleCli("setgenerate", "false") +
             "\nUsing json rpc\n"
             + HelpExampleRpc("setgenerate", "true, 1")
@@ -319,7 +332,7 @@ UniValue setgenerate(const UniValue& params, bool fHelp)
     if (params.size() > 0)
         fGenerate = params[0].get_bool();
 
-    int nGenProcLimit = -1;
+    int nGenProcLimit = GetArg("-genproclimit", -1);;
     if (params.size() > 1)
     {
         nGenProcLimit = params[1].get_int();
@@ -327,11 +340,22 @@ UniValue setgenerate(const UniValue& params, bool fHelp)
         //    fGenerate = false;
     }
 
-    mapArgs["-gen"] = (fGenerate ? "1" : "0");
-    mapArgs ["-genproclimit"] = itostr(nGenProcLimit);
-    if ( fGenerate == 0 )
-        KOMODO_MININGTHREADS = -1;
+    if (fGenerate && !nGenProcLimit)
+    {
+        VERUS_MINTBLOCKS = 1;
+        fGenerate = GetBoolArg("-gen", false);
+        nGenProcLimit = KOMODO_MININGTHREADS;
+    }
+    else if (!fGenerate)
+    {
+        VERUS_MINTBLOCKS = 0;
+        KOMODO_MININGTHREADS = 0;
+    }
     else KOMODO_MININGTHREADS = (int32_t)nGenProcLimit;
+
+    mapArgs["-gen"] = (fGenerate ? "1" : "0");
+    mapArgs ["-genproclimit"] = itostr(KOMODO_MININGTHREADS);
+
 #ifdef ENABLE_WALLET
     GenerateBitcoins(fGenerate, pwalletMain, nGenProcLimit);
 #else
@@ -379,14 +403,22 @@ UniValue getmininginfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("difficulty",       (double)GetNetworkDifficulty()));
     obj.push_back(Pair("errors",           GetWarnings("statusbar")));
     obj.push_back(Pair("genproclimit",     (int)GetArg("-genproclimit", -1)));
-    obj.push_back(Pair("localsolps"  ,     getlocalsolps(params, false)));
-    obj.push_back(Pair("networksolps",     getnetworksolps(params, false)));
+    if (ASSETCHAINS_ALGO == ASSETCHAINS_EQUIHASH)
+    {
+        obj.push_back(Pair("localsolps"  , getlocalsolps(params, false)));
+        obj.push_back(Pair("networksolps", getnetworksolps(params, false)));
+    }
+    else
+    {
+        obj.push_back(Pair("localhashps"  , GetBoolArg("-gen", false) ? getlocalsolps(params, false) : (double)0.0));
+    }
     obj.push_back(Pair("networkhashps",    getnetworksolps(params, false)));
     obj.push_back(Pair("pooledtx",         (uint64_t)mempool.size()));
     obj.push_back(Pair("testnet",          Params().TestnetToBeDeprecatedFieldRPC()));
     obj.push_back(Pair("chain",            Params().NetworkIDString()));
 #ifdef ENABLE_MINING
-    obj.push_back(Pair("generate",         getgenerate(params, false)));
+    obj.push_back(Pair("staking",          VERUS_MINTBLOCKS));
+    obj.push_back(Pair("generate",         GetBoolArg("-gen", false)));
     obj.push_back(Pair("numthreads",       (int64_t)KOMODO_MININGTHREADS));
 #endif
     return obj;
@@ -552,10 +584,13 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
             BlockMap::iterator mi = mapBlockIndex.find(hash);
             if (mi != mapBlockIndex.end()) {
                 CBlockIndex *pindex = mi->second;
-                if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
-                    return "duplicate";
-                if (pindex->nStatus & BLOCK_FAILED_MASK)
-                    return "duplicate-invalid";
+                if (pindex)
+                {
+                    if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
+                        return "duplicate";
+                    if (pindex->nStatus & BLOCK_FAILED_MASK)
+                        return "duplicate-invalid";
+                }
                 return "duplicate-inconclusive";
             }
 
@@ -572,8 +607,43 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
     if (strMode != "template")
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
 
-    if (vNodes.empty())
-        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Komodo is not connected!");
+    bool fvNodesEmpty;
+    {
+        LOCK(cs_vNodes);
+        fvNodesEmpty = vNodes.empty();
+    }
+    if (Params().MiningRequiresPeers() && (IsNotInSync() || fvNodesEmpty))
+    {
+        int loops = 0, blockDiff = 0, newDiff = 0;
+        const int delay = 15;
+        do {
+            if (fvNodesEmpty)
+            {
+                MilliSleep(1000 + rand() % 4000);
+                LOCK(cs_vNodes);
+                fvNodesEmpty = vNodes.empty();
+                loops = 0;
+                blockDiff = 0;
+            }
+            if ((newDiff = IsNotInSync()) > 1)
+            {
+                if (blockDiff != newDiff)
+                {
+                    blockDiff = newDiff;
+                }
+                else
+                {
+                    if (++loops <= delay)
+                    {
+                        MilliSleep(1000);
+                    }
+                    else break;
+                }
+            }
+        } while (fvNodesEmpty || IsNotInSync());
+        if (loops > delay)
+            throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Cannot get a block template while no peers are connected or chain not in sync!");
+    }
 
     //if (IsInitialBlockDownload())
      //   throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Zcash is downloading blocks...");
@@ -649,7 +719,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         }
 #ifdef ENABLE_WALLET
         CReserveKey reservekey(pwalletMain);
-        pblocktemplate = CreateNewBlockWithKey(reservekey,chainActive.LastTip()->nHeight+1,KOMODO_MAXGPUCOUNT);
+        pblocktemplate = CreateNewBlockWithKey(reservekey,chainActive.LastTip()->GetHeight()+1,KOMODO_MAXGPUCOUNT);
 #else
         pblocktemplate = CreateNewBlockWithKey();
 #endif
@@ -702,7 +772,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
                 // Correct this if GetBlockTemplate changes the order
             //    entry.push_back(Pair("foundersreward", (int64_t)tx.vout[1].nValue));
             //}
-            CAmount nReward = GetBlockSubsidy(chainActive.LastTip()->nHeight+1, Params().GetConsensus());
+            CAmount nReward = GetBlockSubsidy(chainActive.LastTip()->GetHeight()+1, Params().GetConsensus());
             entry.push_back(Pair("coinbasevalue", nReward));
             entry.push_back(Pair("required", true));
             txCoinbase = entry;
@@ -740,7 +810,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
     if ( ASSETCHAINS_STAKED != 0 )
     {
         arith_uint256 POWtarget; int32_t PoSperc;
-        POWtarget = komodo_PoWtarget(&PoSperc,hashTarget,(int32_t)(pindexPrev->nHeight+1),ASSETCHAINS_STAKED);
+        POWtarget = komodo_PoWtarget(&PoSperc,hashTarget,(int32_t)(pindexPrev->GetHeight()+1),ASSETCHAINS_STAKED);
         result.push_back(Pair("target", POWtarget.GetHex()));
         result.push_back(Pair("PoSperc", (int64_t)PoSperc));
         result.push_back(Pair("ac_staked", (int64_t)ASSETCHAINS_STAKED));
@@ -753,7 +823,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
     result.push_back(Pair("sizelimit", (int64_t)MAX_BLOCK_SIZE));
     result.push_back(Pair("curtime", pblock->GetBlockTime()));
     result.push_back(Pair("bits", strprintf("%08x", pblock->nBits)));
-    result.push_back(Pair("height", (int64_t)(pindexPrev->nHeight+1)));
+    result.push_back(Pair("height", (int64_t)(pindexPrev->GetHeight()+1)));
 
     //fprintf(stderr,"return complete template\n");
     return result;
@@ -815,19 +885,22 @@ UniValue submitblock(const UniValue& params, bool fHelp)
         BlockMap::iterator mi = mapBlockIndex.find(hash);
         if (mi != mapBlockIndex.end()) {
             CBlockIndex *pindex = mi->second;
-            if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
-                return "duplicate";
-            if (pindex->nStatus & BLOCK_FAILED_MASK)
-                return "duplicate-invalid";
-            // Otherwise, we might only have the header - process the block before returning
-            fBlockPresent = true;
+            if (pindex)
+            {
+                if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
+                    return "duplicate";
+                if (pindex->nStatus & BLOCK_FAILED_MASK)
+                    return "duplicate-invalid";
+                // Otherwise, we might only have the header - process the block before returning
+                fBlockPresent = true;
+            }
         }
     }
 
     CValidationState state;
     submitblock_StateCatcher sc(block.GetHash());
     RegisterValidationInterface(&sc);
-    bool fAccepted = ProcessNewBlock(1,chainActive.LastTip()->nHeight+1,state, NULL, &block, true, NULL);
+    bool fAccepted = ProcessNewBlock(1,chainActive.LastTip()->GetHeight()+1,state, NULL, &block, true, NULL);
     UnregisterValidationInterface(&sc);
     if (fBlockPresent)
     {

@@ -18,6 +18,10 @@
 #include <string>
 #include <vector>
 
+#define OPRETTYPE_TIMELOCK 1
+#define OPRETTYPE_STAKEPARAMS 2
+#define OPRETTYPE_STAKECHEAT 3
+
 static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 520; // bytes
 
 // Max size of pushdata in a CC sig in bytes
@@ -379,6 +383,7 @@ protected:
         }
         return *this;
     }
+    bool GetBalancedData(const_iterator& pc, std::vector<std::vector<unsigned char>>& vSolutions) const;
 public:
     CScript() { }
     CScript(const CScript& b) : CScriptBase(b.begin(), b.end()) { }
@@ -400,11 +405,9 @@ public:
     }
 
     CScript(int64_t b)        { operator<<(b); }
-
     explicit CScript(opcodetype b)     { operator<<(b); }
     explicit CScript(const CScriptNum& b) { operator<<(b); }
     explicit CScript(const std::vector<unsigned char>& b) { operator<<(b); }
-
 
     CScript& operator<<(int64_t b) { return push_int64(b); }
 
@@ -574,12 +577,25 @@ public:
     bool IsPayToPublicKey() const;
 
     bool IsPayToScriptHash() const;
+    bool GetPushedData(CScript::const_iterator pc, std::vector<std::vector<unsigned char>>& vData) const;
+    bool IsOpReturn() const { return size() > 0 && (*this)[0] == OP_RETURN; }
+    bool GetOpretData(std::vector<std::vector<unsigned char>>& vData) const;
+
+    bool IsPayToCryptoCondition(CScript *ccSubScript, std::vector<std::vector<unsigned char>>& vSolutions) const;
+    bool IsPayToCryptoCondition(CScript *ccSubScript) const;
     bool IsPayToCryptoCondition() const;
     bool IsCoinImport() const;
     bool MayAcceptCryptoCondition() const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
     bool IsPushOnly() const;
+
+    /** if the front of the script has check lock time verify. this is a fairly simple check.
+     * accepts NULL as parameter if unlockTime is not needed.
+     */
+    bool IsCheckLockTimeVerify(int64_t *unlockTime) const;
+
+    bool IsCheckLockTimeVerify() const;
 
     /**
      * Returns whether the script is guaranteed to fail at execution,
@@ -590,6 +606,8 @@ public:
     {
         return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE);
     }
+
+    std::string ToString() const;
 
     void clear()
     {

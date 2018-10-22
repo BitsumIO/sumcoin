@@ -3,10 +3,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "rpcserver.h"
+#include "rpc/server.h"
 
-#include "base58.h"
 #include "init.h"
+#include "key_io.h"
 #include "random.h"
 #include "sync.h"
 #include "ui_interface.h"
@@ -240,6 +240,13 @@ UniValue help(const UniValue& params, bool fHelp)
 
 extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 
+#ifdef ENABLE_WALLET
+void GenerateBitcoins(bool b, CWallet *pw, int t);
+#else
+void GenerateBitcoins(bool b, CWallet *pw);
+#endif
+
+
 UniValue stop(const UniValue& params, bool fHelp)
 {
     char buf[64];
@@ -248,6 +255,13 @@ UniValue stop(const UniValue& params, bool fHelp)
         throw runtime_error(
             "stop\n"
             "\nStop Komodo server.");
+
+#ifdef ENABLE_WALLET
+    GenerateBitcoins(false, pwalletMain, 0);
+#else
+    GenerateBitcoins(false, 0);
+#endif
+
     // Shutdown will take long enough that the response should get back
     StartShutdown();
     sprintf(buf,"%s Komodo server stopping",ASSETCHAINS_SYMBOL);
@@ -261,7 +275,6 @@ static const CRPCCommand vRPCCommands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
     /* Overall control/query calls */
-    { "control",            "getinfo",                &getinfo,                true  }, /* uses wallet if enabled */
     { "control",            "help",                   &help,                   true  },
     { "control",            "stop",                   &stop,                   true  },
 
@@ -348,19 +361,20 @@ static const CRPCCommand vRPCCommands[] =
 #ifdef ENABLE_WALLET
     { "rawtransactions",    "fundrawtransaction",     &fundrawtransaction,     false },
 #endif
-    /* auction */
+/*
+    // auction
     { "auction",       "auctionaddress",    &auctionaddress,  true },
     
-    /* lotto */
+    // lotto
     { "lotto",       "lottoaddress",    &lottoaddress,  true },
     
-    /* fsm */
+    // fsm
     { "FSM",       "FSMaddress",   &FSMaddress, true },
     { "FSM", "FSMcreate",    &FSMcreate,  true },
     { "FSM",   "FSMlist",      &FSMlist,    true },
     { "FSM",   "FSMinfo",      &FSMinfo,    true },
     
-    /* rewards */
+    // rewards
     { "rewards",       "rewardslist",       &rewardslist,     true },
     { "rewards",       "rewardsinfo",       &rewardsinfo,     true },
     { "rewards",       "rewardscreatefunding",       &rewardscreatefunding,     true },
@@ -369,16 +383,16 @@ static const CRPCCommand vRPCCommands[] =
     { "rewards",       "rewardsunlock",     &rewardsunlock,   true },
     { "rewards",       "rewardsaddress",    &rewardsaddress,  true },
     
-    /* faucet */
+    // faucet
     { "faucet",       "faucetinfo",      &faucetinfo,         true },
     { "faucet",       "faucetfund",      &faucetfund,         true },
     { "faucet",       "faucetget",       &faucetget,          true },
     { "faucet",       "faucetaddress",   &faucetaddress,      true },
     
-    /* MofN */
+    // MofN
     { "MofN",       "mofnaddress",   &mofnaddress,      true },
     
-    /* Channels */
+    // Channels
     { "channels",       "channelsaddress",   &channelsaddress,   true },
     { "channels",       "channelsinfo",      &channelsinfo,      true },
     { "channels",       "channelsopen",      &channelsopen,      true },
@@ -387,7 +401,7 @@ static const CRPCCommand vRPCCommands[] =
     { "channels",       "channelsstop",      &channelsstop,      true },
     { "channels",       "channelsrefund",    &channelsrefund,    true },
     
-    /* Oracles */
+    // Oracles
     { "oracles",       "oraclesaddress",   &oraclesaddress,     true },
     { "oracles",       "oracleslist",      &oracleslist,        true },
     { "oracles",       "oraclesinfo",      &oraclesinfo,        true },
@@ -397,26 +411,19 @@ static const CRPCCommand vRPCCommands[] =
     { "oracles",       "oraclesdata",      &oraclesdata,        true },
     { "oracles",       "oraclessamples",   &oraclessamples,     true },
     
-    /* Prices */
-    { "prices",       "pricesaddress",      &pricesaddress,      true },
-    { "prices",       "priceslist",         &priceslist,         true },
-    { "prices",       "pricesinfo",         &pricesinfo,         true },
-    { "prices",       "pricescreate",       &pricescreate,       true },
-    { "prices",       "pricesaddfunding",   &pricesaddfunding,   true },
-    { "prices",       "pricesbet",          &pricesbet,          true },
-    { "prices",       "pricesstatus",       &pricesstatus,       true },
-    { "prices",       "pricesfinish",       &pricesfinish,       true },
+    // Prices
+    { "prices",       "pricesaddress",   &pricesaddress,      true },
     
-    /* Pegs */
+    // Pegs
     { "pegs",       "pegsaddress",   &pegsaddress,      true },
     
-    /* Triggers */
+    // Triggers
     { "triggers",       "triggersaddress",   &triggersaddress,      true },
     
-    /* Payments */
+    // Payments
     { "payments",       "paymentsaddress",   &paymentsaddress,      true },
     
-    /* Gateways */
+    // Gateways
     { "gateways",       "gatewaysaddress",   &gatewaysaddress,      true },
     { "gateways",       "gatewayslist",      &gatewayslist,         true },
     { "gateways",       "gatewaysinfo",      &gatewaysinfo,         true },
@@ -425,10 +432,9 @@ static const CRPCCommand vRPCCommands[] =
     { "gateways",       "gatewaysclaim",     &gatewaysclaim,        true },
     { "gateways",       "gatewayswithdraw",  &gatewayswithdraw,     true },
     { "gateways",       "gatewayspending",   &gatewayspending,      true },
-    { "gateways",       "gatewaysmultisig",  &gatewaysmultisig,     true },
     { "gateways",       "gatewaysmarkdone",  &gatewaysmarkdone,     true },
 
-    /* dice */
+    // dice
     { "dice",       "dicelist",      &dicelist,         true },
     { "dice",       "diceinfo",      &diceinfo,         true },
     { "dice",       "dicefund",      &dicefund,         true },
@@ -438,7 +444,7 @@ static const CRPCCommand vRPCCommands[] =
     { "dice",       "dicestatus",    &dicestatus,       true },
     { "dice",       "diceaddress",   &diceaddress,      true },
 
-    /* tokens */
+    // tokens
     { "tokens",       "tokeninfo",        &tokeninfo,         true },
     { "tokens",       "tokenlist",        &tokenlist,         true },
     { "tokens",       "tokenorders",      &tokenorders,       true },
@@ -454,9 +460,8 @@ static const CRPCCommand vRPCCommands[] =
     { "tokens",       "tokencancelask",   &tokencancelask,    true },
     { "tokens",       "tokenfillask",     &tokenfillask,      true },
     //{ "tokens",       "tokenfillswap",    &tokenfillswap,     true },
-    { "tokens",       "tokenconvert",         &tokenconvert,          true },
-
-/* Address index */
+*/
+    /* Address index */
     { "addressindex",       "getaddressmempool",      &getaddressmempool,      true  },
     { "addressindex",       "getaddressutxos",        &getaddressutxos,        false },
     { "addressindex",       "getaddressdeltas",       &getaddressdeltas,       false },
@@ -481,11 +486,8 @@ static const CRPCCommand vRPCCommands[] =
     /* Not shown in help */
     { "hidden",             "setmocktime",            &setmocktime,            true  },
 #ifdef ENABLE_WALLET
-    { "wallet",             "resendwallettransactions", &resendwallettransactions, true},
-#endif
-
-#ifdef ENABLE_WALLET
     /* Wallet */
+    { "wallet",             "resendwallettransactions", &resendwallettransactions, true},
     { "wallet",             "addmultisigaddress",     &addmultisigaddress,     true  },
     { "wallet",             "backupwallet",           &backupwallet,           true  },
     { "wallet",             "dumpprivkey",            &dumpprivkey,            true  },
@@ -574,6 +576,20 @@ const CRPCCommand *CRPCTable::operator[](const std::string &name) const
     if (it == mapCommands.end())
         return NULL;
     return (*it).second;
+}
+
+bool CRPCTable::appendCommand(const std::string& name, const CRPCCommand* pcmd)
+{
+    if (IsRPCRunning())
+        return false;
+
+    // don't allow overwriting for now
+    map<string, const CRPCCommand*>::const_iterator it = mapCommands.find(name);
+    if (it != mapCommands.end())
+        return false;
+
+    mapCommands[name] = pcmd;
+    return true;
 }
 
 bool StartRPC()
@@ -746,6 +762,16 @@ std::string HelpExampleRpc(const std::string& methodname, const std::string& arg
         "\"method\": \"" + methodname + "\", \"params\": [" + args + "] }' -H 'content-type: text/plain;' http://127.0.0.1:7771/\n";
 }
 
+string experimentalDisabledHelpMsg(const string& rpc, const string& enableArg)
+{
+    return "\nWARNING: " + rpc + " is disabled.\n"
+        "To enable it, restart zcashd with the -experimentalfeatures and\n"
+        "-" + enableArg + " commandline options, or add these two lines\n"
+        "to the zcash.conf file:\n\n"
+        "experimentalfeatures=1\n"
+        + enableArg + "=1\n";
+}
+
 void RPCRegisterTimerInterface(RPCTimerInterface *iface)
 {
     timerInterfaces.push_back(iface);
@@ -768,7 +794,7 @@ void RPCRunLater(const std::string& name, boost::function<void(void)> func, int6
     deadlineTimers.insert(std::make_pair(name, boost::shared_ptr<RPCTimerBase>(timerInterface->NewTimer(func, nSeconds*1000))));
 }
 
-const CRPCTable tableRPC;
+CRPCTable tableRPC;
 
 // Return async rpc queue
 std::shared_ptr<AsyncRPCQueue> getAsyncRPCQueue()

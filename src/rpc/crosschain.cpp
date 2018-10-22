@@ -11,7 +11,7 @@
 #include "cc/utils.h"
 #include "main.h"
 #include "primitives/transaction.h"
-#include "rpcserver.h"
+#include "rpc/server.h"
 #include "sync.h"
 #include "util.h"
 #include "script/script.h"
@@ -68,7 +68,7 @@ UniValue height_MoM(const UniValue& params, bool fHelp)
             ret.push_back(Pair("error",(char *)"no active chain yet"));
             return(ret);
         }
-        height = chainActive.Tip()->nHeight;
+        height = chainActive.Tip()->GetHeight();
     }
     //fprintf(stderr,"height_MoM height.%d\n",height);
     depth = komodo_MoM(&notarized_height,&MoM,&kmdtxid,height,&MoMoM,&MoMoMoffset,&MoMoMdepth,&kmdstarti,&kmdendi);

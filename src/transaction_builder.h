@@ -67,6 +67,9 @@ private:
 
     boost::optional<std::pair<uint256, libzcash::SaplingPaymentAddress>> zChangeAddr;
     boost::optional<CTxDestination> tChangeAddr;
+    boost::optional<CScript> opReturn;
+
+    bool AddOpRetLast(CScript &s);
 
 public:
     TransactionBuilder() {}
@@ -86,12 +89,16 @@ public:
         uint256 ovk,
         libzcash::SaplingPaymentAddress to,
         CAmount value,
-        std::array<unsigned char, ZC_MEMO_SIZE> memo = {{0xF6}});
+        std::array<unsigned char, ZC_MEMO_SIZE> memo = {{0}});
 
     // Assumes that the value correctly corresponds to the provided UTXO.
     void AddTransparentInput(COutPoint utxo, CScript scriptPubKey, CAmount value);
 
     bool AddTransparentOutput(CTxDestination& to, CAmount value);
+
+    void AddOpRet(CScript &s);
+
+    bool AddOpRetLast();
 
     void SendChangeTo(libzcash::SaplingPaymentAddress changeAddr, uint256 ovk);
 
