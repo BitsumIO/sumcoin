@@ -17,7 +17,7 @@ class CBaseMainParams : public CBaseChainParams
 public:
     CBaseMainParams()
     {
-        nRPCPort = 8232;
+        nRPCPort = 7771;
     }
 };
 static CBaseMainParams mainParams;
@@ -30,7 +30,7 @@ class CBaseTestNetParams : public CBaseChainParams
 public:
     CBaseTestNetParams()
     {
-        nRPCPort = 18232;
+        nRPCPort = 17771;
         strDataDir = "testnet3";
     }
 };
@@ -67,6 +67,8 @@ static CBaseChainParams* pCurrentBaseParams = 0;
 
 const CBaseChainParams& BaseParams()
 {
+    if ( pCurrentBaseParams == 0 )
+        pCurrentBaseParams = &mainParams;
     assert(pCurrentBaseParams);
     return *pCurrentBaseParams;
 }

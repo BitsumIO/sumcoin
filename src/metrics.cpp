@@ -16,8 +16,9 @@
 #include <boost/thread.hpp>
 #include <boost/thread/synchronized_value.hpp>
 #include <string>
-#ifdef WIN32
+#ifdef _WIN32
 #include <io.h>
+#include <windows.h>
 #else
 #include <sys/ioctl.h>
 #endif
@@ -68,21 +69,21 @@ double AtomicTimer::rate(const AtomicCounter& count)
     return duration > 0 ? (double)count.get() / duration : 0;
 }
 
-static CCriticalSection cs_metrics;
+CCriticalSection cs_metrics;
 
-static boost::synchronized_value<int64_t> nNodeStartTime;
-static boost::synchronized_value<int64_t> nNextRefresh;
+boost::synchronized_value<int64_t> nNodeStartTime;
+boost::synchronized_value<int64_t> nNextRefresh;
 AtomicCounter transactionsValidated;
 AtomicCounter ehSolverRuns;
 AtomicCounter solutionTargetChecks;
-static AtomicCounter minedBlocks;
+AtomicCounter minedBlocks;
 AtomicTimer miningTimer;
 
-static boost::synchronized_value<std::list<uint256>> trackedBlocks;
+boost::synchronized_value<std::list<uint256>> trackedBlocks;
 
-static boost::synchronized_value<std::list<std::string>> messageBox;
-static boost::synchronized_value<std::string> initMessage;
-static bool loaded = false;
+boost::synchronized_value<std::list<std::string>> messageBox;
+boost::synchronized_value<std::string> initMessage;
+bool loaded = false;
 
 extern int64_t GetNetworkHashPS(int lookup, int height);
 
@@ -210,7 +211,7 @@ int printStats(bool mining)
     {
         LOCK2(cs_main, cs_vNodes);
         height = chainActive.Height();
-        tipmediantime = chainActive.Tip()->GetMedianTimePast();
+        tipmediantime = chainActive.LastTip()->GetMedianTimePast();
         connections = vNodes.size();
         netsolps = GetNetworkHashPS(120, -1);
     }
@@ -414,30 +415,6 @@ int printInitMessage()
     return 2;
 }
 
-#ifdef WIN32
-#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
-
-bool enableVTMode()
-{
-    // Set output mode to handle virtual terminal sequences
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-
-    DWORD dwMode = 0;
-    if (!GetConsoleMode(hOut, &dwMode)) {
-        return false;
-    }
-
-    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    if (!SetConsoleMode(hOut, dwMode)) {
-        return false;
-    }
-    return true;
-}
-#endif
-
 void ThreadShowMetricsScreen()
 {
     // Make this thread recognisable as the metrics screen thread
@@ -449,10 +426,6 @@ void ThreadShowMetricsScreen()
     int64_t nRefresh = GetArg("-metricsrefreshtime", isTTY ? 1 : 600);
 
     if (isScreen) {
-#ifdef WIN32
-        enableVTMode();
-#endif
-
         // Clear screen
         std::cout << "\e[2J";
 
@@ -476,17 +449,16 @@ void ThreadShowMetricsScreen()
 
         // Get current window size
         if (isTTY) {
-#ifdef WIN32
-            CONSOLE_SCREEN_BUFFER_INFO csbi;
-            if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi) != 0) {
-                cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-            }
-#else
-            struct winsize w;
-            w.ws_col = 0;
-            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1 && w.ws_col != 0) {
-                cols = w.ws_col;
-            }
+#ifdef _WIN32
+          CONSOLE_SCREEN_BUFFER_INFO csbi;
+          GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+          cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+          #else
+          struct winsize w;
+          w.ws_col = 0;
+          if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1 && w.ws_col != 0) {
+            cols = w.ws_col;
+          }
 #endif
         }
 
@@ -512,13 +484,7 @@ void ThreadShowMetricsScreen()
 
         if (isScreen) {
             // Explain how to exit
-            std::cout << "[";
-#ifdef WIN32
-            std::cout << _("'zcash-cli.exe stop' to exit");
-#else
-            std::cout << _("Press Ctrl+C to exit");
-#endif
-            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::endl;
+            std::cout << "[" << _("Press Ctrl+C to exit") << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::endl;
         } else {
             // Print delineator
             std::cout << "----------------------------------------" << std::endl;

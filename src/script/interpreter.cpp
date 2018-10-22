@@ -3,16 +3,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <cryptoconditions.h>
+
 #include "interpreter.h"
 
 #include "consensus/upgrades.h"
 #include "primitives/transaction.h"
+#include "cc/eval.h"
 #include "crypto/ripemd160.h"
 #include "crypto/sha1.h"
 #include "crypto/sha256.h"
 #include "pubkey.h"
 #include "script/script.h"
 #include "uint256.h"
+
+
 
 using namespace std;
 
@@ -821,6 +826,7 @@ bool EvalScript(
                 }
                 break;
 
+                // script that takes PAXpubkey + real pubkey, verifies output is within acceptable range and sig is for real pubkey. adjust vin amount to fiatvalue
                 case OP_CHECKSIG:
                 case OP_CHECKSIGVERIFY:
                 {
@@ -937,6 +943,37 @@ bool EvalScript(
                 }
                 break;
 
+                case OP_CHECKCRYPTOCONDITION:
+                case OP_CHECKCRYPTOCONDITIONVERIFY:
+                {
+                    if (!IsCryptoConditionsEnabled()) {
+                        goto INTERPRETER_DEFAULT;
+                    }
+
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+//fprintf(stderr,"check cryptocondition\n");
+                    int fResult = checker.CheckCryptoCondition(stacktop(-1), stacktop(-2), script, consensusBranchId);
+                    if (fResult == -1) {
+                        return set_error(serror, SCRIPT_ERR_CRYPTOCONDITION_INVALID_FULFILLMENT);
+                    }
+                    
+                    popstack(stack);
+                    popstack(stack);
+
+                    stack.push_back(fResult == 1 ? vchTrue : vchFalse);
+
+                    if (opcode == OP_CHECKCRYPTOCONDITIONVERIFY)
+                    {
+                        if (fResult == 1)
+                            popstack(stack);
+                        else
+                            return set_error(serror, SCRIPT_ERR_CRYPTOCONDITION_VERIFY);
+                    }
+                }
+                break;
+
+INTERPRETER_DEFAULT:
                 default:
                     return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
             }
@@ -1302,6 +1339,59 @@ bool TransactionSignatureChecker::CheckSig(
     return true;
 }
 
+
+int TransactionSignatureChecker::CheckCryptoCondition(
+        const std::vector<unsigned char>& condBin,
+        const std::vector<unsigned char>& ffillBin,
+        const CScript& scriptCode,
+        uint32_t consensusBranchId) const
+{
+    // Hash type is one byte tacked on to the end of the fulfillment
+    if (ffillBin.empty())
+        return false;
+
+    CC *cond = cc_readFulfillmentBinary((unsigned char*)ffillBin.data(), ffillBin.size()-1);
+    if (!cond) return -1;
+
+    if (!IsSupportedCryptoCondition(cond)) return 0;
+    if (!IsSignedCryptoCondition(cond)) return 0;
+    
+    uint256 sighash;
+    int nHashType = ffillBin.back();
+    try {
+        sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, consensusBranchId, this->txdata);
+    } catch (logic_error ex) {
+        return 0;
+    }
+    /*int32_t z; uint8_t *ptr;
+    ptr = (uint8_t *)scriptCode.data();
+    for (z=0; z<scriptCode.size(); z++)
+        fprintf(stderr,"%02x",ptr[z]);
+    fprintf(stderr," <- CScript\n");
+    for (z=0; z<32; z++)
+        fprintf(stderr,"%02x",((uint8_t *)&sighash)[z]);
+    fprintf(stderr," sighash nIn.%d nHashType.%d %.8f id.%d\n",(int32_t)nIn,(int32_t)nHashType,(double)amount/COIN,(int32_t)consensusBranchId);
+     */
+    VerifyEval eval = [] (CC *cond, void *checker) {
+        //fprintf(stderr,"checker.%p\n",(TransactionSignatureChecker*)checker);
+        return ((TransactionSignatureChecker*)checker)->CheckEvalCondition(cond);
+    };
+    //fprintf(stderr,"non-checker path\n");
+    int out = cc_verify(cond, (const unsigned char*)&sighash, 32, 0,
+                        condBin.data(), condBin.size(), eval, (void*)this);
+    //fprintf(stderr,"out.%d from cc_verify\n",(int32_t)out);
+    cc_free(cond);
+    return out;
+}
+
+
+int TransactionSignatureChecker::CheckEvalCondition(const CC *cond) const
+{
+    fprintf(stderr, "Cannot check crypto-condition Eval outside of server\n");
+    return 0;
+}
+
+
 bool TransactionSignatureChecker::CheckLockTime(const CScriptNum& nLockTime) const
 {
     // There are two times of nLockTime: lock-by-blockheight
@@ -1320,7 +1410,10 @@ bool TransactionSignatureChecker::CheckLockTime(const CScriptNum& nLockTime) con
     // Now that we know we're comparing apples-to-apples, the
     // comparison is a simple numeric one.
     if (nLockTime > (int64_t)txTo->nLockTime)
+    {
+        //fprintf(stderr,"CLTV error: nLockTime %llu > %u txTo->nLockTime\n",*(long long *)&nLockTime,(uint32_t)txTo->nLockTime);
         return false;
+    }
 
     // Finally the nLockTime feature can be disabled and thus
     // CHECKLOCKTIMEVERIFY bypassed if every txin has been
@@ -1333,8 +1426,42 @@ bool TransactionSignatureChecker::CheckLockTime(const CScriptNum& nLockTime) con
     // inputs, but testing just this input minimizes the data
     // required to prove correct CHECKLOCKTIMEVERIFY execution.
     if (txTo->vin[nIn].IsFinal())
+    {
+        //fprintf(stderr,"CLTV error: nonfinal vin.%d nSequence.%u vs %u\n",(int32_t)nIn,(uint32_t)txTo->vin[nIn].nSequence,(uint32_t)std::numeric_limits<uint32_t>::max());
         return false;
+    }
 
+    return true;
+}
+
+
+/*
+ * Allow larger opcode in case of crypto condition scriptSig
+ */
+bool EvalCryptoConditionSig(
+    vector<vector<unsigned char> >& stack,
+    const CScript& scriptSig,
+    ScriptError* serror)
+{
+    CScript::const_iterator pc = scriptSig.begin();
+    opcodetype opcode;
+    valtype vchPushValue;
+    set_error(serror, SCRIPT_ERR_UNKNOWN_ERROR);
+
+    if (!scriptSig.GetOp(pc, opcode, vchPushValue))
+        return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
+
+    if (opcode == 0 || opcode > OP_PUSHDATA4)
+        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+    if (pc != scriptSig.end())
+        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+    if (vchPushValue.size() > MAX_SCRIPT_CRYPTOCONDITION_FULFILLMENT_SIZE)
+        return set_error(serror, SCRIPT_ERR_PUSH_SIZE);
+
+    stack.push_back(vchPushValue);
+    
     return true;
 }
 
@@ -1354,7 +1481,12 @@ bool VerifyScript(
     }
 
     vector<vector<unsigned char> > stack, stackCopy;
-    if (!EvalScript(stack, scriptSig, flags, checker, consensusBranchId, serror))
+    if (IsCryptoConditionsEnabled() && scriptPubKey.IsPayToCryptoCondition()) {
+        if (!EvalCryptoConditionSig(stack, scriptSig, serror))
+            // serror is set
+            return false;
+    }
+    else if (!EvalScript(stack, scriptSig, flags, checker, consensusBranchId, serror))
         // serror is set
         return false;
     if (flags & SCRIPT_VERIFY_P2SH)

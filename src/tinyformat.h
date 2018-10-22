@@ -500,6 +500,13 @@ class FormatArg
         void format(std::ostream& out, const char* fmtBegin,
                     const char* fmtEnd, int ntrunc) const
         {
+/*
+            // It would be nice if we could do this from the destructor, but we
+            // can't if TINYFORMAT_ERROR is used to throw an exception!
+            m_fmt = printFormatStringLiteral(m_out, m_fmt);
+            if(*m_fmt != '\0')
+                TINYFORMAT_ERROR("tinyformat: Too many conversion specifiers in format string");
+=======*/
             m_formatImpl(out, fmtBegin, fmtEnd, ntrunc, m_value);
         }
 
@@ -814,7 +821,7 @@ inline void formatImpl(std::ostream& out, const char* fmt,
 
     // Print remaining part of format string.
     fmt = printFormatStringLiteral(out, fmt);
-    if(*fmt != '\0')
+    if(*fmt != '\0' && 0 ) // disabled due to complaints
         TINYFORMAT_ERROR("tinyformat: Too many conversion specifiers in format string");
 
     // Restore stream state

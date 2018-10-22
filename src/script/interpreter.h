@@ -8,6 +8,7 @@
 
 #include "script_error.h"
 #include "primitives/transaction.h"
+#include "script/cc.h"
 
 #include <vector>
 #include <stdint.h>
@@ -130,18 +131,26 @@ public:
          return false;
     }
 
+    virtual int CheckCryptoCondition(
+            const std::vector<unsigned char>& condBin,
+            const std::vector<unsigned char>& ffillBin,
+            const CScript& scriptCode,
+            uint32_t consensusBranchId) const
+    {
+        return false;
+    }
+
     virtual ~BaseSignatureChecker() {}
 };
 
 class TransactionSignatureChecker : public BaseSignatureChecker
 {
-private:
+protected:
     const CTransaction* txTo;
     unsigned int nIn;
     const CAmount amount;
     const PrecomputedTransactionData* txdata;
 
-protected:
     virtual bool VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const;
 
 public:
@@ -149,6 +158,12 @@ public:
     TransactionSignatureChecker(const CTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, const PrecomputedTransactionData& txdataIn) : txTo(txToIn), nIn(nInIn), amount(amountIn), txdata(&txdataIn) {}
     bool CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, uint32_t consensusBranchId) const;
     bool CheckLockTime(const CScriptNum& nLockTime) const;
+    int CheckCryptoCondition(
+        const std::vector<unsigned char>& condBin,
+        const std::vector<unsigned char>& ffillBin,
+        const CScript& scriptCode,
+        uint32_t consensusBranchId) const;
+    virtual int CheckEvalCondition(const CC *cond) const;
 };
 
 class MutableTransactionSignatureChecker : public TransactionSignatureChecker
@@ -174,5 +189,4 @@ bool VerifyScript(
     const BaseSignatureChecker& checker,
     uint32_t consensusBranchId,
     ScriptError* serror = NULL);
-
 #endif // BITCOIN_SCRIPT_INTERPRETER_H

@@ -649,7 +649,6 @@ BOOST_DATA_TEST_CASE(test_Get, boost::unit_test::data::xrange(static_cast<int>(C
     t1.vout.resize(2);
     t1.vout[0].nValue = 90*CENT;
     t1.vout[0].scriptPubKey << OP_1;
-
     BOOST_CHECK(AreInputsStandard(t1, coins, consensusBranchId));
     BOOST_CHECK_EQUAL(coins.GetValueIn(t1), (50+21+22)*CENT);
 

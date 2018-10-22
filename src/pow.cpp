@@ -16,27 +16,17 @@
 
 #include "sodium.h"
 
+#ifdef ENABLE_RUST
+#include "librustzcash.h"
+#endif // ENABLE_RUST
+uint32_t komodo_chainactive_timestamp();
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
-
     // Genesis block
-    if (pindexLast == NULL)
+    if (pindexLast == NULL )
         return nProofOfWorkLimit;
-
-    {
-        // Comparing to pindexLast->nHeight with >= because this function
-        // returns the work required for the block after pindexLast.
-        if (params.nPowAllowMinDifficultyBlocksAfterHeight != boost::none &&
-            pindexLast->nHeight >= params.nPowAllowMinDifficultyBlocksAfterHeight.get())
-        {
-            // Special difficulty rule for testnet:
-            // If the new block's timestamp is more than 6 * 2.5 minutes
-            // then allow mining of a min-difficulty block.
-            if (pblock && pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing * 6)
-                return nProofOfWorkLimit;
-        }
-    }
 
     // Find the first block in the averaging interval
     const CBlockIndex* pindexFirst = pindexLast;
@@ -96,6 +86,8 @@ bool CheckEquihashSolution(const CBlockHeader *pblock, const CChainParams& param
     unsigned int n = params.EquihashN();
     unsigned int k = params.EquihashK();
 
+    if ( Params().NetworkIDString() == "regtest" )
+        return(true);
     // Hash state
     crypto_generichash_blake2b_state state;
     EhInitialiseState(n, k, state);
@@ -110,6 +102,14 @@ bool CheckEquihashSolution(const CBlockHeader *pblock, const CChainParams& param
     // H(I||V||...
     crypto_generichash_blake2b_update(&state, (unsigned char*)&ss[0], ss.size());
 
+    #ifdef ENABLE_RUST
+    // Ensure that our Rust interactions are working in production builds. This is
+    // temporary and should be removed.
+    {
+        assert(librustzcash_xor(0x0f0f0f0f0f0f0f0f, 0x1111111111111111) == 0x1e1e1e1e1e1e1e1e);
+    }
+    #endif // ENABLE_RUST
+
     bool isValid;
     EhIsValidSolution(n, k, state, pblock->nSolution, isValid);
     if (!isValid)
@@ -118,24 +118,118 @@ bool CheckEquihashSolution(const CBlockHeader *pblock, const CChainParams& param
     return true;
 }
 
-bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
+int32_t komodo_chosennotary(int32_t *notaryidp,int32_t height,uint8_t *pubkey33,uint32_t timestamp);
+int32_t komodo_is_special(uint8_t pubkeys[66][33],int32_t mids[66],uint32_t blocktimes[66],int32_t height,uint8_t pubkey33[33],uint32_t blocktime);
+int32_t komodo_currentheight();
+CBlockIndex *komodo_chainactive(int32_t height);
+void komodo_index2pubkey33(uint8_t *pubkey33,CBlockIndex *pindex,int32_t height);
+extern int32_t KOMODO_CHOSEN_ONE;
+extern uint64_t ASSETCHAINS_STAKED;
+extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
+#define KOMODO_ELECTION_GAP 2000
+
+int32_t komodo_eligiblenotary(uint8_t pubkeys[66][33],int32_t *mids,uint32_t blocktimes[66],int32_t *nonzpkeysp,int32_t height);
+int32_t KOMODO_LOADINGBLOCKS = 1;
+
+extern std::string NOTARY_PUBKEY;
+
+bool CheckProofOfWork(int32_t height,uint8_t *pubkey33,uint256 hash,unsigned int nBits,const Consensus::Params& params,uint32_t blocktime)
 {
-    bool fNegative;
-    bool fOverflow;
-    arith_uint256 bnTarget;
-
+    extern int32_t KOMODO_REWIND;
+    bool fNegative,fOverflow; uint8_t origpubkey33[33]; int32_t i,nonzpkeys=0,nonz=0,special=0,special2=0,notaryid=-1,flag = 0, mids[66]; uint32_t tiptime,blocktimes[66];
+    arith_uint256 bnTarget; uint8_t pubkeys[66][33];
+    //for (i=31; i>=0; i--)
+    //    fprintf(stderr,"%02x",((uint8_t *)&hash)[i]);
+    //fprintf(stderr," checkpow\n");
+    memcpy(origpubkey33,pubkey33,33);
+    memset(blocktimes,0,sizeof(blocktimes));
+    tiptime = komodo_chainactive_timestamp();
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
-
-    // Check range
+    if ( height == 0 )
+    {
+        height = komodo_currentheight() + 1;
+        //fprintf(stderr,"set height to %d\n",height);
+    }
+    if ( height > 34000 && ASSETCHAINS_SYMBOL[0] == 0 ) // 0 -> non-special notary
+    {
+        special = komodo_chosennotary(&notaryid,height,pubkey33,tiptime);
+        for (i=0; i<33; i++)
+        {
+            if ( pubkey33[i] != 0 )
+                nonz++;
+        }
+        if ( nonz == 0 )
+        {
+            //fprintf(stderr,"ht.%d null pubkey checkproof return\n",height);
+            return(true); // will come back via different path with pubkey set
+        }
+        flag = komodo_eligiblenotary(pubkeys,mids,blocktimes,&nonzpkeys,height);
+        special2 = komodo_is_special(pubkeys,mids,blocktimes,height,pubkey33,blocktime);
+        if ( notaryid >= 0 )
+        {
+            if ( height > 10000 && height < 80000 && (special != 0 || special2 > 0) )
+                flag = 1;
+            else if ( height >= 80000 && height < 108000 && special2 > 0 )
+                flag = 1;
+            else if ( height >= 108000 && special2 > 0 )
+                flag = (height > 1000000 || (height % KOMODO_ELECTION_GAP) > 64 || (height % KOMODO_ELECTION_GAP) == 0);
+            else if ( height == 790833 )
+                flag = 1;
+            else if ( special2 < 0 )
+            {
+                if ( height > 792000 )
+                    flag = 0;
+                else fprintf(stderr,"ht.%d notaryid.%d special.%d flag.%d special2.%d\n",height,notaryid,special,flag,special2);
+            }
+            if ( (flag != 0 || special2 > 0) && special2 != -2 )
+            {
+                //fprintf(stderr,"EASY MINING ht.%d\n",height);
+                bnTarget.SetCompact(KOMODO_MINDIFF_NBITS,&fNegative,&fOverflow);
+            }
+        }
+    }
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return error("CheckProofOfWork(): nBits below minimum work");
-
+    if (  ASSETCHAINS_STAKED != 0 )
+    {
+        arith_uint256 bnMaxPoSdiff;
+        bnTarget.SetCompact(KOMODO_MINDIFF_NBITS,&fNegative,&fOverflow);
+    }
     // Check proof of work matches claimed amount
-    if (UintToArith256(hash) > bnTarget)
-        return error("CheckProofOfWork(): hash doesn't match nBits");
-
+    if ( UintToArith256(hash) > bnTarget )
+    {
+        if ( KOMODO_LOADINGBLOCKS != 0 )
+            return true;
+        if ( ASSETCHAINS_SYMBOL[0] != 0 || height > 792000 )
+        {
+            //if ( 0 && height > 792000 )
+            if ( Params().NetworkIDString() != "regtest" )
+            {
+                for (i=31; i>=0; i--)
+                    fprintf(stderr,"%02x",((uint8_t *)&hash)[i]);
+                fprintf(stderr," hash vs ");
+                for (i=31; i>=0; i--)
+                    fprintf(stderr,"%02x",((uint8_t *)&bnTarget)[i]);
+                fprintf(stderr," ht.%d special.%d special2.%d flag.%d notaryid.%d mod.%d error\n",height,special,special2,flag,notaryid,(height % 35));
+                for (i=0; i<33; i++)
+                    fprintf(stderr,"%02x",pubkey33[i]);
+                fprintf(stderr," <- pubkey\n");
+                for (i=0; i<33; i++)
+                    fprintf(stderr,"%02x",origpubkey33[i]);
+                fprintf(stderr," <- origpubkey\n");
+            }
+            return false;
+        }
+    }
+    /*for (i=31; i>=0; i--)
+     fprintf(stderr,"%02x",((uint8_t *)&hash)[i]);
+     fprintf(stderr," hash vs ");
+     for (i=31; i>=0; i--)
+     fprintf(stderr,"%02x",((uint8_t *)&bnTarget)[i]);
+     fprintf(stderr," height.%d notaryid.%d PoW valid\n",height,notaryid);*/
     return true;
 }
+
 
 arith_uint256 GetBlockProof(const CBlockIndex& block)
 {

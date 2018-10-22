@@ -107,5 +107,13 @@ qa/pull-tester/test.*/*
 
 libzcashconsensus.pc
 
+src/fiat/-usd
 contrib/debian/files
 contrib/debian/substvars
+
+src/rpcmisc~.cpp
+src/komodo-cli
+src/komodod
+src/komodo-tx
+src/komodo-test
+src/wallet-utility

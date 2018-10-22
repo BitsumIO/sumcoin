@@ -34,7 +34,7 @@ std::istream& operator>>(std::istream &, Fp_model<n, modulus> &);
  * The implementation is mostly a wrapper around GMP's MPN (constant-size integers).
  * But for the integer sizes of interest for libsnark (3 to 5 limbs of 64 bits each),
  * we implement performance-critical routines, like addition and multiplication,
- * using hand-optimized assembly code.
+ * using hand-optimzied assembly code.
 */
 template<mp_size_t n, const bigint<n>& modulus>
 class Fp_model {
@@ -50,9 +50,9 @@ public:
     static int64_t sqr_cnt;
     static int64_t inv_cnt;
 #endif
-    static size_t num_bits;
+    static uint64_t num_bits;
     static bigint<n> euler; // (modulus-1)/2
-    static size_t s; // modulus = 2^s * t + 1
+    static uint64_t s; // modulus = 2^s * t + 1
     static bigint<n> t; // with t odd
     static bigint<n> t_minus_1_over_2; // (t-1)/2
     static Fp_model<n, modulus> nqr; // a quadratic nonresidue
@@ -69,7 +69,7 @@ public:
     Fp_model(const bigint<n> &b);
     Fp_model(const int64_t x, const bool is_unsigned=false);
 
-    void set_uint64(const uint64_t x);
+    void set_ulong(const uint64_t x);
 
     void mul_reduce(const bigint<n> &other);
 
@@ -80,9 +80,9 @@ public:
         would return bigint(2) */
     bigint<n> as_bigint() const;
     /* Return the last limb of the standard representation of the
-       field element. E.g. on 64-bit architectures Fp(123).as_uint64()
-       and Fp(2^64+123).as_uint64() would both return 123. */
-    uint64_t as_uint64() const;
+       field element. E.g. on 64-bit architectures Fp(123).as_ulong()
+       and Fp(2^64+123).as_ulong() would both return 123. */
+    uint64_t as_ulong() const;
 
     bool operator==(const Fp_model& other) const;
     bool operator!=(const Fp_model& other) const;
@@ -111,8 +111,8 @@ public:
     template<mp_size_t m>
     Fp_model operator^(const bigint<m> &pow) const;
 
-    static size_t size_in_bits() { return num_bits; }
-    static size_t capacity() { return num_bits - 1; }
+    static uint64_t size_in_bits() { return num_bits; }
+    static uint64_t capacity() { return num_bits - 1; }
     static bigint<n> field_char() { return modulus; }
 
     static Fp_model<n, modulus> zero();
@@ -141,13 +141,13 @@ int64_t Fp_model<n, modulus>::inv_cnt = 0;
 #endif
 
 template<mp_size_t n, const bigint<n>& modulus>
-size_t Fp_model<n, modulus>::num_bits;
+uint64_t Fp_model<n, modulus>::num_bits;
 
 template<mp_size_t n, const bigint<n>& modulus>
 bigint<n> Fp_model<n, modulus>::euler;
 
 template<mp_size_t n, const bigint<n>& modulus>
-size_t Fp_model<n, modulus>::s;
+uint64_t Fp_model<n, modulus>::s;
 
 template<mp_size_t n, const bigint<n>& modulus>
 bigint<n> Fp_model<n, modulus>::t;

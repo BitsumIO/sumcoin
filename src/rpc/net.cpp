@@ -165,6 +165,47 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
     return ret;
 }
 
+int32_t KOMODO_LONGESTCHAIN;
+int32_t komodo_longestchain()
+{
+    int32_t ht,n=0,num=0,maxheight=0,height = 0;
+    vector<CNodeStats> vstats;
+    {
+        LOCK(cs_main);
+        CopyNodeStats(vstats);
+    }
+    BOOST_FOREACH(const CNodeStats& stats, vstats)
+    {
+        //fprintf(stderr,"komodo_longestchain iter.%d\n",n);
+        CNodeStateStats statestats;
+        bool fStateStats = GetNodeStateStats(stats.nodeid,statestats);
+        ht = 0;
+        if ( stats.nStartingHeight > ht )
+            ht = stats.nStartingHeight;
+        if ( statestats.nSyncHeight > ht )
+            ht = statestats.nSyncHeight;
+        if ( statestats.nCommonHeight > ht )
+            ht = statestats.nCommonHeight;
+        if ( maxheight == 0 || ht > maxheight*1.01 )
+            maxheight = ht, num = 1;
+        else if ( ht > maxheight*0.99 )
+            num++;
+        n++;
+        if ( ht > height )
+            height = ht;
+    }
+    if ( num > (n >> 1) )
+    {
+        extern char ASSETCHAINS_SYMBOL[];
+        if ( 0 && height != KOMODO_LONGESTCHAIN )
+            fprintf(stderr,"set %s KOMODO_LONGESTCHAIN <- %d\n",ASSETCHAINS_SYMBOL,height);
+        KOMODO_LONGESTCHAIN = height;
+        return(height);
+    }
+    KOMODO_LONGESTCHAIN = 0;
+    return(0);
+}
+
 UniValue addnode(const UniValue& params, bool fHelp)
 {
     string strCommand;
@@ -256,7 +297,7 @@ UniValue getaddednodeinfo(const UniValue& params, bool fHelp)
             "    \"connected\" : true|false,          (boolean) If connected\n"
             "    \"addresses\" : [\n"
             "       {\n"
-            "         \"address\" : \"192.168.0.201:8233\",  (string) The Zcash server host and port\n"
+            "         \"address\" : \"192.168.0.201:8233\",  (string) The Komodo server host and port\n"
             "         \"connected\" : \"outbound\"           (string) connection, inbound or outbound\n"
             "       }\n"
             "       ,...\n"

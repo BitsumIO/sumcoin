@@ -33,13 +33,17 @@
 
 using namespace std;
 
+extern uint64_t ASSETCHAINS_STAKED;
+extern int32_t KOMODO_MININGTHREADS;
+arith_uint256 komodo_PoWtarget(int32_t *percPoSp,arith_uint256 target,int32_t height,int32_t goalperc);
+
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
  * or over the difficulty averaging window if 'lookup' is nonpositive.
  * If 'height' is nonnegative, compute the estimate at the time when a given block was found.
  */
 int64_t GetNetworkHashPS(int lookup, int height) {
-    CBlockIndex *pb = chainActive.Tip();
+    CBlockIndex *pb = chainActive.LastTip();
 
     if (height >= 0 && height < chainActive.Height())
         pb = chainActive[height];
@@ -145,7 +149,7 @@ UniValue getgenerate(const UniValue& params, bool fHelp)
         throw runtime_error(
             "getgenerate\n"
             "\nReturn if the server is set to generate coins or not. The default is false.\n"
-            "It is set with the command line argument -gen (or zcash.conf setting gen)\n"
+            "It is set with the command line argument -gen (or komodo.conf setting gen)\n"
             "It can also be set with the setgenerate call.\n"
             "\nResult\n"
             "true|false      (boolean) If the server is set to generate coins or not\n"
@@ -158,6 +162,9 @@ UniValue getgenerate(const UniValue& params, bool fHelp)
     return GetBoolArg("-gen", false);
 }
 
+extern uint8_t NOTARY_PUBKEY33[33];
+
+//Value generate(const Array& params, bool fHelp)
 UniValue generate(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 1)
@@ -180,7 +187,7 @@ UniValue generate(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Wallet disabled and -mineraddress not set");
         }
 #else
-        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "zcashd compiled without wallet and -mineraddress not set");
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "komodod compiled without wallet and -mineraddress not set");
 #endif
     }
     if (!Params().MineBlocksOnDemand())
@@ -204,10 +211,15 @@ UniValue generate(const UniValue& params, bool fHelp)
     UniValue blockHashes(UniValue::VARR);
     unsigned int n = Params().EquihashN();
     unsigned int k = Params().EquihashK();
+    uint64_t lastTime = 0;
     while (nHeight < nHeightEnd)
     {
+        // Validation may fail if block generation is too fast
+        if (GetTime() == lastTime) MilliSleep(1001);
+        lastTime = GetTime();
+
 #ifdef ENABLE_WALLET
-        std::unique_ptr<CBlockTemplate> pblocktemplate(CreateNewBlockWithKey(reservekey));
+        std::unique_ptr<CBlockTemplate> pblocktemplate(CreateNewBlockWithKey(reservekey,nHeight,KOMODO_MAXGPUCOUNT));
 #else
         std::unique_ptr<CBlockTemplate> pblocktemplate(CreateNewBlockWithKey());
 #endif
@@ -216,7 +228,7 @@ UniValue generate(const UniValue& params, bool fHelp)
         CBlock *pblock = &pblocktemplate->block;
         {
             LOCK(cs_main);
-            IncrementExtraNonce(pblock, chainActive.Tip(), nExtraNonce);
+            IncrementExtraNonce(pblock, chainActive.LastTip(), nExtraNonce);
         }
 
         // Hash state
@@ -245,10 +257,12 @@ UniValue generate(const UniValue& params, bool fHelp)
 
             // (x_1, x_2, ...) = A(I, V, n, k)
             std::function<bool(std::vector<unsigned char>)> validBlock =
-                    [&pblock](std::vector<unsigned char> soln) {
+                    [&pblock](std::vector<unsigned char> soln)
+            {
+                LOCK(cs_main);
                 pblock->nSolution = soln;
                 solutionTargetChecks.increment();
-                return CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus());
+                return CheckProofOfWork(chainActive.Height(),NOTARY_PUBKEY33,pblock->GetHash(), pblock->nBits, Params().GetConsensus(),pblock->nTime);
             };
             bool found = EhBasicSolveUncancellable(n, k, curr_state, validBlock);
             ehSolverRuns.increment();
@@ -258,7 +272,7 @@ UniValue generate(const UniValue& params, bool fHelp)
         }
 endloop:
         CValidationState state;
-        if (!ProcessNewBlock(state, NULL, pblock, true, NULL))
+        if (!ProcessNewBlock(1,chainActive.LastTip()->nHeight+1,state, NULL, pblock, true, NULL))
             throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
         ++nHeight;
         blockHashes.push_back(pblock->GetHash().GetHex());
@@ -295,7 +309,7 @@ UniValue setgenerate(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Wallet disabled and -mineraddress not set");
         }
 #else
-        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "zcashd compiled without wallet and -mineraddress not set");
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "komodod compiled without wallet and -mineraddress not set");
 #endif
     }
     if (Params().MineBlocksOnDemand())
@@ -309,12 +323,15 @@ UniValue setgenerate(const UniValue& params, bool fHelp)
     if (params.size() > 1)
     {
         nGenProcLimit = params[1].get_int();
-        if (nGenProcLimit == 0)
-            fGenerate = false;
+        //if (nGenProcLimit == 0)
+        //    fGenerate = false;
     }
 
     mapArgs["-gen"] = (fGenerate ? "1" : "0");
     mapArgs ["-genproclimit"] = itostr(nGenProcLimit);
+    if ( fGenerate == 0 )
+        KOMODO_MININGTHREADS = -1;
+    else KOMODO_MININGTHREADS = (int32_t)nGenProcLimit;
 #ifdef ENABLE_WALLET
     GenerateBitcoins(fGenerate, pwalletMain, nGenProcLimit);
 #else
@@ -370,6 +387,7 @@ UniValue getmininginfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("chain",            Params().NetworkIDString()));
 #ifdef ENABLE_MINING
     obj.push_back(Pair("generate",         getgenerate(params, false)));
+    obj.push_back(Pair("numthreads",       (int64_t)KOMODO_MININGTHREADS));
 #endif
     return obj;
 }
@@ -498,7 +516,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Wallet disabled and -mineraddress not set");
         }
 #else
-        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "zcashd compiled without wallet and -mineraddress not set");
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "komodod compiled without wallet and -mineraddress not set");
 #endif
     }
 
@@ -541,7 +559,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
                 return "duplicate-inconclusive";
             }
 
-            CBlockIndex* const pindexPrev = chainActive.Tip();
+            CBlockIndex* const pindexPrev = chainActive.LastTip();
             // TestBlockValidity only supports blocks built on the current Tip
             if (block.hashPrevBlock != pindexPrev->GetBlockHash())
                 return "inconclusive-not-best-prevblk";
@@ -555,10 +573,10 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
 
     if (vNodes.empty())
-        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Zcash is not connected!");
+        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Komodo is not connected!");
 
-    if (IsInitialBlockDownload())
-        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Zcash is downloading blocks...");
+    //if (IsInitialBlockDownload())
+     //   throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Zcash is downloading blocks...");
 
     static unsigned int nTransactionsUpdatedLast;
 
@@ -580,7 +598,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         else
         {
             // NOTE: Spec does not specify behaviour for non-string longpollid, but this makes testing easier
-            hashWatchedChain = chainActive.Tip()->GetBlockHash();
+            hashWatchedChain = chainActive.LastTip()->GetBlockHash();
             nTransactionsUpdatedLastLP = nTransactionsUpdatedLast;
         }
 
@@ -590,7 +608,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
             checktxtime = boost::get_system_time() + boost::posix_time::minutes(1);
 
             boost::unique_lock<boost::mutex> lock(csBestBlock);
-            while (chainActive.Tip()->GetBlockHash() == hashWatchedChain && IsRPCRunning())
+            while (chainActive.LastTip()->GetBlockHash() == hashWatchedChain && IsRPCRunning())
             {
                 if (!cvBlockChange.timed_wait(lock, checktxtime))
                 {
@@ -612,7 +630,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
     static CBlockIndex* pindexPrev;
     static int64_t nStart;
     static CBlockTemplate* pblocktemplate;
-    if (pindexPrev != chainActive.Tip() ||
+    if (pindexPrev != chainActive.LastTip() ||
         (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 5))
     {
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
@@ -620,7 +638,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
 
         // Store the pindexBest used before CreateNewBlockWithKey, to avoid races
         nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
-        CBlockIndex* pindexPrevNew = chainActive.Tip();
+        CBlockIndex* pindexPrevNew = chainActive.LastTip();
         nStart = GetTime();
 
         // Create new block
@@ -631,12 +649,12 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         }
 #ifdef ENABLE_WALLET
         CReserveKey reservekey(pwalletMain);
-        pblocktemplate = CreateNewBlockWithKey(reservekey);
+        pblocktemplate = CreateNewBlockWithKey(reservekey,chainActive.LastTip()->nHeight+1,KOMODO_MAXGPUCOUNT);
 #else
         pblocktemplate = CreateNewBlockWithKey();
 #endif
         if (!pblocktemplate)
-            throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
+            throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory or no available utxo for staking");
 
         // Need to update only after we know CreateNewBlockWithKey succeeded
         pindexPrev = pindexPrevNew;
@@ -680,15 +698,16 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
 
         if (tx.IsCoinBase()) {
             // Show founders' reward if it is required
-            if (pblock->vtx[0].vout.size() > 1) {
+            //if (pblock->vtx[0].vout.size() > 1) {
                 // Correct this if GetBlockTemplate changes the order
-                entry.push_back(Pair("foundersreward", (int64_t)tx.vout[1].nValue));
-            }
+            //    entry.push_back(Pair("foundersreward", (int64_t)tx.vout[1].nValue));
+            //}
+            CAmount nReward = GetBlockSubsidy(chainActive.LastTip()->nHeight+1, Params().GetConsensus());
+            entry.push_back(Pair("coinbasevalue", nReward));
             entry.push_back(Pair("required", true));
             txCoinbase = entry;
-        } else {
+        } else
             transactions.push_back(entry);
-        }
     }
 
     UniValue aux(UniValue::VOBJ);
@@ -717,8 +736,16 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         result.push_back(Pair("coinbaseaux", aux));
         result.push_back(Pair("coinbasevalue", (int64_t)pblock->vtx[0].vout[0].nValue));
     }
-    result.push_back(Pair("longpollid", chainActive.Tip()->GetBlockHash().GetHex() + i64tostr(nTransactionsUpdatedLast)));
-    result.push_back(Pair("target", hashTarget.GetHex()));
+    result.push_back(Pair("longpollid", chainActive.LastTip()->GetBlockHash().GetHex() + i64tostr(nTransactionsUpdatedLast)));
+    if ( ASSETCHAINS_STAKED != 0 )
+    {
+        arith_uint256 POWtarget; int32_t PoSperc;
+        POWtarget = komodo_PoWtarget(&PoSperc,hashTarget,(int32_t)(pindexPrev->nHeight+1),ASSETCHAINS_STAKED);
+        result.push_back(Pair("target", POWtarget.GetHex()));
+        result.push_back(Pair("PoSperc", (int64_t)PoSperc));
+        result.push_back(Pair("ac_staked", (int64_t)ASSETCHAINS_STAKED));
+        result.push_back(Pair("origtarget", hashTarget.GetHex()));
+    } else result.push_back(Pair("target", hashTarget.GetHex()));
     result.push_back(Pair("mintime", (int64_t)pindexPrev->GetMedianTimePast()+1));
     result.push_back(Pair("mutable", aMutable));
     result.push_back(Pair("noncerange", "00000000ffffffff"));
@@ -728,6 +755,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
     result.push_back(Pair("bits", strprintf("%08x", pblock->nBits)));
     result.push_back(Pair("height", (int64_t)(pindexPrev->nHeight+1)));
 
+    //fprintf(stderr,"return complete template\n");
     return result;
 }
 
@@ -799,7 +827,7 @@ UniValue submitblock(const UniValue& params, bool fHelp)
     CValidationState state;
     submitblock_StateCatcher sc(block.GetHash());
     RegisterValidationInterface(&sc);
-    bool fAccepted = ProcessNewBlock(state, NULL, &block, true, NULL);
+    bool fAccepted = ProcessNewBlock(1,chainActive.LastTip()->nHeight+1,state, NULL, &block, true, NULL);
     UnregisterValidationInterface(&sc);
     if (fBlockPresent)
     {
@@ -886,12 +914,11 @@ UniValue getblocksubsidy(const UniValue& params, bool fHelp)
             "1. height         (numeric, optional) The block height.  If not provided, defaults to the current height of the chain.\n"
             "\nResult:\n"
             "{\n"
-            "  \"miner\" : x.xxx           (numeric) The mining reward amount in " + CURRENCY_UNIT + ".\n"
-            "  \"founders\" : x.xxx        (numeric) The founders reward amount in " + CURRENCY_UNIT + ".\n"
+            "  \"miner\" : x.xxx           (numeric) The mining reward amount in KMD.\n"
             "}\n"
             "\nExamples:\n"
             + HelpExampleCli("getblocksubsidy", "1000")
-            + HelpExampleRpc("getblockubsidy", "1000")
+            + HelpExampleRpc("getblocksubsidy", "1000")
         );
 
     LOCK(cs_main);
@@ -900,14 +927,9 @@ UniValue getblocksubsidy(const UniValue& params, bool fHelp)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
 
     CAmount nReward = GetBlockSubsidy(nHeight, Params().GetConsensus());
-    CAmount nFoundersReward = 0;
-    if ((nHeight > 0) && (nHeight <= Params().GetConsensus().GetLastFoundersRewardBlockHeight())) {
-        nFoundersReward = nReward/5;
-        nReward -= nFoundersReward;
-    }
     UniValue result(UniValue::VOBJ);
     result.push_back(Pair("miner", ValueFromAmount(nReward)));
-    result.push_back(Pair("founders", ValueFromAmount(nFoundersReward)));
+    //result.push_back(Pair("founders", ValueFromAmount(nFoundersReward)));
     return result;
 }
 

@@ -25,7 +25,7 @@ public:
     CScriptID(const uint160& in) : uint160(in) {}
 };
 
-static const unsigned int MAX_OP_RETURN_RELAY = 80;      //! bytes
+static const unsigned int MAX_OP_RETURN_RELAY = 8192;      //! bytes
 extern unsigned nMaxDatacarrierBytes;
 
 /**
@@ -64,6 +64,7 @@ enum txnouttype
     TX_PUBKEYHASH,
     TX_SCRIPTHASH,
     TX_MULTISIG,
+    TX_CRYPTOCONDITION,
     TX_NULL_DATA,
 };
 

@@ -6,6 +6,8 @@
 #ifndef BITCOIN_COINS_H
 #define BITCOIN_COINS_H
 
+#define KOMODO_ENABLE_INTEREST //enabling this is a hardfork, activate with new RR method
+
 #include "compressor.h"
 #include "core_memusage.h"
 #include "memusage.h"
@@ -86,12 +88,14 @@ public:
     //! version of the CTransaction; accesses to this value should probably check for nHeight as well,
     //! as new tx version will probably only be introduced at certain heights
     int nVersion;
+    //uint32_t nLockTime;
 
     void FromTx(const CTransaction &tx, int nHeightIn) {
         fCoinBase = tx.IsCoinBase();
         vout = tx.vout;
         nHeight = nHeightIn;
         nVersion = tx.nVersion;
+        //nLockTime = tx.nLockTime;
         ClearUnspendable();
     }
 
@@ -524,7 +528,7 @@ public:
      * @param[in] tx	transaction for which we are checking input total
      * @return	Sum of value of all inputs (scriptSigs), (positive valueBalance or zero) and JoinSplit vpub_new
      */
-    CAmount GetValueIn(const CTransaction& tx) const;
+    CAmount GetValueIn(int32_t nHeight,int64_t *interestp,const CTransaction& tx,uint32_t prevblocktime) const;
 
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
     bool HaveInputs(const CTransaction& tx) const;
@@ -536,6 +540,7 @@ public:
     double GetPriority(const CTransaction &tx, int nHeight) const;
 
     const CTxOut &GetOutputFor(const CTxIn& input) const;
+    const CScript &GetSpendFor(const CTxIn& input) const;
 
     friend class CCoinsModifier;
 

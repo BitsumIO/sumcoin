@@ -16,10 +16,8 @@ void TxConfirmStats::Initialize(std::vector<double>& defaultBuckets,
 {
     decay = _decay;
     dataTypeString = _dataTypeString;
-
     buckets.insert(buckets.end(), defaultBuckets.begin(), defaultBuckets.end());
     buckets.push_back(std::numeric_limits<double>::infinity());
-
     for (unsigned int i = 0; i < buckets.size(); i++) {
         bucketMap[buckets[i]] = i;
     }
@@ -55,8 +53,14 @@ void TxConfirmStats::ClearCurrent(unsigned int nBlockHeight)
 
 unsigned int TxConfirmStats::FindBucketIndex(double val)
 {
+    extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
     auto it = bucketMap.lower_bound(val);
-    assert(it != bucketMap.end());
+    if ( it != bucketMap.end() )
+    {
+        //static uint32_t counter;
+        //if ( counter++ < 1 )
+        //    fprintf(stderr,"%s FindBucketIndex violation: from val %f\n",ASSETCHAINS_SYMBOL,val);
+    }
     return it->second;
 }
 

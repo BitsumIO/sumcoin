@@ -184,12 +184,10 @@ BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
     }
 }
 
-
 BOOST_AUTO_TEST_CASE(TxConfirmStats_FindBucketIndex)
 {
     std::vector<double> buckets {0.0, 3.5, 42.0};
     TxConfirmStats txcs;
-
     txcs.Initialize(buckets, MAX_BLOCK_CONFIRMS, DEFAULT_DECAY, "Test");
 
     BOOST_CHECK_EQUAL(txcs.FindBucketIndex(-1.0), 0);

@@ -11,6 +11,7 @@ export BITCOIND=${REAL_BITCOIND}
 #Run the tests
 
 testScripts=(
+    'cryptoconditions.py'
     'paymentdisclosure.py'
     'prioritisetransaction.py'
     'wallet_treestate.py'
@@ -53,6 +54,9 @@ testScripts=(
     'key_import_export.py'
     'nodehandling.py'
     'reindex.py'
+    'addressindex.py'
+    'timestampindex.py'
+    'spentindex.py'
     'decodescript.py'
     'blockchain.py'
     'disablewallet.py'

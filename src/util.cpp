@@ -15,6 +15,7 @@
 #include "sync.h"
 #include "utilstrencodings.h"
 #include "utiltime.h"
+#include "komodo_defs.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -24,7 +25,7 @@
 #include <pthread_np.h>
 #endif
 
-#ifndef WIN32
+#ifndef _WIN32
 // for posix_fallocate
 #ifdef __linux__
 
@@ -350,7 +351,7 @@ void ParseParameters(int argc, const char* const argv[])
             strValue = str.substr(is_index+1);
             str = str.substr(0, is_index);
         }
-#ifdef WIN32
+#ifdef _WIN32
         boost::to_lower(str);
         if (boost::algorithm::starts_with(str, "/"))
             str = "-" + str.substr(1);
@@ -434,11 +435,11 @@ std::string HelpMessageOpt(const std::string &option, const std::string &message
 
 static std::string FormatException(const std::exception* pex, const char* pszThread)
 {
-#ifdef WIN32
+#ifdef _WIN32
     char pszModule[MAX_PATH] = "";
     GetModuleFileNameA(NULL, pszModule, sizeof(pszModule));
 #else
-    const char* pszModule = "Zcash";
+    const char* pszModule = "Komodo";
 #endif
     if (pex)
         return strprintf(
@@ -456,16 +457,25 @@ void PrintExceptionContinue(const std::exception* pex, const char* pszThread)
     strMiscWarning = message;
 }
 
+extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
+//int64_t MAX_MONEY = 200000000 * 100000000LL;
+
 boost::filesystem::path GetDefaultDataDir()
 {
     namespace fs = boost::filesystem;
+    char symbol[KOMODO_ASSETCHAIN_MAXLEN];
+    if ( ASSETCHAINS_SYMBOL[0] != 0 )
+        strcpy(symbol,ASSETCHAINS_SYMBOL);
+    else symbol[0] = 0;
     // Windows < Vista: C:\Documents and Settings\Username\Application Data\Zcash
     // Windows >= Vista: C:\Users\Username\AppData\Roaming\Zcash
     // Mac: ~/Library/Application Support/Zcash
     // Unix: ~/.zcash
-#ifdef WIN32
+#ifdef _WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Zcash";
+    if ( symbol[0] == 0 )
+        return GetSpecialFolderPath(CSIDL_APPDATA) / "Komodo";
+    else return GetSpecialFolderPath(CSIDL_APPDATA) / "Komodo" / symbol;
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -477,10 +487,19 @@ boost::filesystem::path GetDefaultDataDir()
     // Mac
     pathRet /= "Library/Application Support";
     TryCreateDirectory(pathRet);
-    return pathRet / "Zcash";
+    if ( symbol[0] == 0 )
+        return pathRet / "Komodo";
+    else
+    {
+        pathRet /= "Komodo";
+        TryCreateDirectory(pathRet);
+        return pathRet / symbol;
+    }
 #else
     // Unix
-    return pathRet / ".zcash";
+    if ( symbol[0] == 0 )
+        return pathRet / ".komodo";
+    else return pathRet / ".komodo" / symbol;
 #endif
 #endif
 }
@@ -499,7 +518,7 @@ static boost::filesystem::path ZC_GetBaseParamsDir()
     // Windows >= Vista: C:\Users\Username\AppData\Roaming\ZcashParams
     // Mac: ~/Library/Application Support/ZcashParams
     // Unix: ~/.zcash-params
-#ifdef WIN32
+#ifdef _WIN32
     // Windows
     return GetSpecialFolderPath(CSIDL_APPDATA) / "ZcashParams";
 #else
@@ -585,7 +604,8 @@ const boost::filesystem::path &GetDataDir(bool fNetSpecific)
         path /= BaseParams().DataDir();
 
     fs::create_directories(path);
-
+    //std::string assetpath = path + "/assets";
+    //boost::filesystem::create_directory(assetpath);
     return path;
 }
 
@@ -597,7 +617,18 @@ void ClearDatadirCache()
 
 boost::filesystem::path GetConfigFile()
 {
-    boost::filesystem::path pathConfigFile(GetArg("-conf", "zcash.conf"));
+    char confname[512];
+    if ( ASSETCHAINS_SYMBOL[0] != 0 )
+        sprintf(confname,"%s.conf",ASSETCHAINS_SYMBOL);
+    else
+    {
+#ifdef __APPLE__
+        strcpy(confname,"Komodo.conf");
+#else
+        strcpy(confname,"komodo.conf");
+#endif
+    }
+    boost::filesystem::path pathConfigFile(GetArg("-conf",confname));
     if (!pathConfigFile.is_complete())
         pathConfigFile = GetDataDir(false) / pathConfigFile;
 
@@ -616,7 +647,7 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
 
     for (boost::program_options::detail::config_file_iterator it(streamConfig, setOptions), end; it != end; ++it)
     {
-        // Don't overwrite existing settings so command line settings override zcash.conf
+        // Don't overwrite existing settings so command line settings override komodo.conf
         string strKey = string("-") + it->string_key;
         if (mapSettingsRet.count(strKey) == 0)
         {
@@ -628,12 +659,14 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
     }
     // If datadir is changed in .conf file:
     ClearDatadirCache();
+    extern uint16_t BITCOIND_RPCPORT;
+    BITCOIND_RPCPORT = GetArg("-rpcport",BaseParams().RPCPort());
 }
 
-#ifndef WIN32
+#ifndef _WIN32
 boost::filesystem::path GetPidFile()
 {
-    boost::filesystem::path pathPidFile(GetArg("-pid", "zcashd.pid"));
+    boost::filesystem::path pathPidFile(GetArg("-pid", "komodod.pid"));
     if (!pathPidFile.is_complete()) pathPidFile = GetDataDir() / pathPidFile;
     return pathPidFile;
 }
@@ -651,13 +684,13 @@ void CreatePidFile(const boost::filesystem::path &path, pid_t pid)
 
 bool RenameOver(boost::filesystem::path src, boost::filesystem::path dest)
 {
-#ifdef WIN32
+#ifdef _WIN32
     return MoveFileExA(src.string().c_str(), dest.string().c_str(),
                        MOVEFILE_REPLACE_EXISTING) != 0;
 #else
     int rc = std::rename(src.string().c_str(), dest.string().c_str());
     return (rc == 0);
-#endif /* WIN32 */
+#endif /* _WIN32 */
 }
 
 /**
@@ -682,7 +715,7 @@ bool TryCreateDirectory(const boost::filesystem::path& p)
 void FileCommit(FILE *fileout)
 {
     fflush(fileout); // harmless if redundantly called
-#ifdef WIN32
+#ifdef _WIN32
     HANDLE hFile = (HANDLE)_get_osfhandle(_fileno(fileout));
     FlushFileBuffers(hFile);
 #else
@@ -797,7 +830,7 @@ void ShrinkDebugFile()
         fclose(file);
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 boost::filesystem::path GetSpecialFolderPath(int nFolder, bool fCreate)
 {
     namespace fs = boost::filesystem;
@@ -820,7 +853,7 @@ boost::filesystem::path GetTempPath() {
 #else
     // TODO: remove when we don't support filesystem v2 anymore
     boost::filesystem::path path;
-#ifdef WIN32
+#ifdef _WIN32
     char pszPath[MAX_PATH] = "";
 
     if (GetTempPathA(MAX_PATH, pszPath))
@@ -880,7 +913,7 @@ void SetupEnvironment()
 
 bool SetupNetworking()
 {
-#ifdef WIN32
+#ifdef _WIN32
     // Initialize Windows Sockets
     WSADATA wsadata;
     int ret = WSAStartup(MAKEWORD(2,2), &wsadata);
@@ -892,15 +925,15 @@ bool SetupNetworking()
 
 void SetThreadPriority(int nPriority)
 {
-#ifdef WIN32
+#ifdef _WIN32
     SetThreadPriority(GetCurrentThread(), nPriority);
-#else // WIN32
+#else // _WIN32
 #ifdef PRIO_THREAD
     setpriority(PRIO_THREAD, 0, nPriority);
 #else // PRIO_THREAD
     setpriority(PRIO_PROCESS, 0, nPriority);
 #endif // PRIO_THREAD
-#endif // WIN32
+#endif // _WIN32
 }
 
 std::string PrivacyInfo()
@@ -915,7 +948,8 @@ std::string LicenseInfo()
     return "\n" +
            FormatParagraph(strprintf(_("Copyright (C) 2009-%i The Bitcoin Core Developers"), COPYRIGHT_YEAR)) + "\n" +
            FormatParagraph(strprintf(_("Copyright (C) 2015-%i The Zcash Developers"), COPYRIGHT_YEAR)) + "\n" +
-           "\n" +
+        FormatParagraph(strprintf(_("Copyright (C) 2015-%i jl777 and SuperNET developers"), COPYRIGHT_YEAR)) + "\n" +
+        "\n" +
            FormatParagraph(_("This is experimental software.")) + "\n" +
            "\n" +
            FormatParagraph(_("Distributed under the MIT software license, see the accompanying file COPYING or <http://www.opensource.org/licenses/mit-license.php>.")) + "\n" +

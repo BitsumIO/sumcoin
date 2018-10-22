@@ -126,16 +126,16 @@ boost::filesystem::path GetDefaultDataDir();
 const boost::filesystem::path &GetDataDir(bool fNetSpecific = true);
 void ClearDatadirCache();
 boost::filesystem::path GetConfigFile();
-#ifndef WIN32
+#ifndef _WIN32
 boost::filesystem::path GetPidFile();
 void CreatePidFile(const boost::filesystem::path &path, pid_t pid);
 #endif
 class missing_zcash_conf : public std::runtime_error {
 public:
-    missing_zcash_conf() : std::runtime_error("Missing zcash.conf") { }
+    missing_zcash_conf() : std::runtime_error("Missing komodo.conf") { }
 };
 void ReadConfigFile(std::map<std::string, std::string>& mapSettingsRet, std::map<std::string, std::vector<std::string> >& mapMultiSettingsRet);
-#ifdef WIN32
+#ifdef _WIN32
 boost::filesystem::path GetSpecialFolderPath(int nFolder, bool fCreate = true);
 #endif
 boost::filesystem::path GetTempPath();
@@ -152,7 +152,7 @@ std::string LicenseInfo();
 
 inline bool IsSwitchChar(char c)
 {
-#ifdef WIN32
+#ifdef _WIN32
     return c == '-' || c == '/';
 #else
     return c == '-';
@@ -258,5 +258,8 @@ template <typename Callable> void TraceThread(const char* name,  Callable func)
         throw;
     }
 }
+
+#define KOMODO_ASSETCHAIN_MAXLEN 65
+
 
 #endif // BITCOIN_UTIL_H

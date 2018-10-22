@@ -8,12 +8,10 @@
 #include "consensus/upgrades.h"
 #include "core_io.h"
 #include "init.h"
-#include "key_io.h"
 #include "main.h"
 #include "net.h"
 #include "netbase.h"
-#include "rpc/protocol.h"
-#include "rpc/server.h"
+#include "rpcserver.h"
 #include "timedata.h"
 #include "util.h"
 #include "utilmoneystr.h"
@@ -21,11 +19,13 @@
 #include "walletdb.h"
 #include "script/interpreter.h"
 #include "utiltime.h"
+#include "rpcprotocol.h"
 #include "zcash/IncrementalMerkleTree.hpp"
 #include "sodium.h"
 #include "miner.h"
 
-#include <array>
+#include <stdint.h>
+
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -34,9 +34,6 @@
 #include "paymentdisclosuredb.h"
 
 using namespace libzcash;
-
-extern UniValue signrawtransaction(const UniValue& params, bool fHelp);
-extern UniValue sendrawtransaction(const UniValue& params, bool fHelp);
 
 int find_output(UniValue obj, int n) {
     UniValue outputMapValue = find_value(obj, "outputmap");
@@ -56,7 +53,6 @@ int find_output(UniValue obj, int n) {
 }
 
 AsyncRPCOperation_sendmany::AsyncRPCOperation_sendmany(
-        boost::optional<TransactionBuilder> builder,
         CMutableTransaction contextualTx,
         std::string fromAddress,
         std::vector<SendManyRecipient> tOutputs,
@@ -71,38 +67,35 @@ AsyncRPCOperation_sendmany::AsyncRPCOperation_sendmany(
     if (minDepth < 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Minconf cannot be negative");
     }
-    
+
     if (fromAddress.size() == 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "From address parameter missing");
     }
-    
+
     if (tOutputs.size() == 0 && zOutputs.size() == 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "No recipients");
     }
 
-    isUsingBuilder_ = false;
-    if (builder) {
-        isUsingBuilder_ = true;
-        builder_ = builder.get();
-    }
-
-    fromtaddr_ = DecodeDestination(fromAddress);
-    isfromtaddr_ = IsValidDestination(fromtaddr_);
+    fromtaddr_ = CBitcoinAddress(fromAddress);
+    isfromtaddr_ = fromtaddr_.IsValid();
     isfromzaddr_ = false;
 
     if (!isfromtaddr_) {
-        auto address = DecodePaymentAddress(fromAddress);
-        if (IsValidPaymentAddress(address)) {
+        CZCPaymentAddress address(fromAddress);
+        try {
+            PaymentAddress addr = address.Get();
+
             // We don't need to lock on the wallet as spending key related methods are thread-safe
-            if (!boost::apply_visitor(HaveSpendingKeyForPaymentAddress(pwalletMain), address)) {
+            SpendingKey key;
+            if (!pwalletMain->GetSpendingKey(addr, key)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid from address, no spending key found for zaddr");
             }
 
             isfromzaddr_ = true;
-            frompaymentaddress_ = address;
-            spendingkey_ = boost::apply_visitor(GetSpendingKeyForPaymentAddress(pwalletMain), address).get();
-        } else {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid from address");
+            frompaymentaddress_ = addr;
+            spendingkey_ = key;
+        } catch (const std::runtime_error& e) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, string("runtime error: ") + e.what());
         }
     }
 
@@ -165,9 +158,9 @@ void AsyncRPCOperation_sendmany::main() {
 
 #ifdef ENABLE_MINING
   #ifdef ENABLE_WALLET
-    GenerateBitcoins(GetBoolArg("-gen",false), pwalletMain, GetArg("-genproclimit", 1));
+    GenerateBitcoins(GetBoolArg("-gen",false), pwalletMain, GetArg("-genproclimit", 0));
   #else
-    GenerateBitcoins(GetBoolArg("-gen",false), GetArg("-genproclimit", 1));
+    GenerateBitcoins(GetBoolArg("-gen",false), GetArg("-genproclimit", 0));
   #endif
 #endif
 
@@ -233,15 +226,12 @@ bool AsyncRPCOperation_sendmany::main_impl() {
                     throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Could not find any non-coinbase UTXOs to spend.");
                 }
             }
-        }        
+        }
     }
-    
+
     if (isfromzaddr_ && !find_unspent_notes()) {
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds, no unspent notes found for zaddr from address.");
     }
-
-    // At least one of z_sprout_inputs_ and z_sapling_inputs_ must be empty by design
-    assert(z_sprout_inputs_.empty() || z_sapling_inputs_.empty());
 
     CAmount t_inputs_total = 0;
     for (SendManyInputUTXO & t : t_inputs_) {
@@ -249,11 +239,8 @@ bool AsyncRPCOperation_sendmany::main_impl() {
     }
 
     CAmount z_inputs_total = 0;
-    for (SendManyInputJSOP & t : z_sprout_inputs_) {
+    for (SendManyInputJSOP & t : z_inputs_) {
         z_inputs_total += std::get<2>(t);
-    }
-    for (auto t : z_sapling_inputs_) {
-        z_inputs_total += t.note.value();
     }
 
     CAmount t_outputs_total = 0;
@@ -277,10 +264,10 @@ bool AsyncRPCOperation_sendmany::main_impl() {
             strprintf("Insufficient transparent funds, have %s, need %s",
             FormatMoney(t_inputs_total), FormatMoney(targetAmount)));
     }
-    
+
     if (isfromzaddr_ && (z_inputs_total < targetAmount)) {
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
-            strprintf("Insufficient shielded funds, have %s, need %s",
+            strprintf("Insufficient protected funds, have %s, need %s",
             FormatMoney(z_inputs_total), FormatMoney(targetAmount)));
     }
 
@@ -325,12 +312,6 @@ bool AsyncRPCOperation_sendmany::main_impl() {
 
         // Check mempooltxinputlimit to avoid creating a transaction which the local mempool rejects
         size_t limit = (size_t)GetArg("-mempooltxinputlimit", 0);
-        {
-            LOCK(cs_main);
-            if (NetworkUpgradeActive(chainActive.Height() + 1, Params().GetConsensus(), Consensus::UPGRADE_OVERWINTER)) {
-                limit = 0;
-            }
-        }
         if (limit > 0) {
             size_t n = t_inputs_.size();
             if (n > limit) {
@@ -339,25 +320,16 @@ bool AsyncRPCOperation_sendmany::main_impl() {
         }
 
         // update the transaction with these inputs
-        if (isUsingBuilder_) {
-            CScript scriptPubKey = GetScriptForDestination(fromtaddr_);
-            for (auto t : t_inputs_) {
-                uint256 txid = std::get<0>(t);
-                int vout = std::get<1>(t);
-                CAmount amount = std::get<2>(t);
-                builder_.AddTransparentInput(COutPoint(txid, vout), scriptPubKey, amount);
-            }
-        } else {
-            CMutableTransaction rawTx(tx_);
-            for (SendManyInputUTXO & t : t_inputs_) {
-                uint256 txid = std::get<0>(t);
-                int vout = std::get<1>(t);
-                CAmount amount = std::get<2>(t);
-                CTxIn in(COutPoint(txid, vout));
-                rawTx.vin.push_back(in);
-            }
-            tx_ = CTransaction(rawTx);
+        CMutableTransaction rawTx(tx_);
+        for (SendManyInputUTXO & t : t_inputs_) {
+            uint256 txid = std::get<0>(t);
+            int vout = std::get<1>(t);
+            CAmount amount = std::get<2>(t);
+            CTxIn in(COutPoint(txid, vout));
+            rawTx.vin.push_back(in);
         }
+        rawTx.nLockTime = (uint32_t)time(NULL) - 60; // jl777
+        tx_ = CTransaction(rawTx);
     }
 
     LogPrint((isfromtaddr_) ? "zrpc" : "zrpcunsafe", "%s: spending %s to send %s with fee %s\n",
@@ -368,151 +340,6 @@ bool AsyncRPCOperation_sendmany::main_impl() {
     LogPrint("zrpcunsafe", "%s: private output: %s\n", getId(), FormatMoney(z_outputs_total));
     LogPrint("zrpc", "%s: fee: %s\n", getId(), FormatMoney(minersFee));
 
-
-    /**
-     * SCENARIO #0
-     *
-     * Sprout not involved, so we just use the TransactionBuilder and we're done.
-     * We added the transparent inputs to the builder earlier.
-     */
-    if (isUsingBuilder_) {
-        builder_.SetFee(minersFee);
-
-        // Get various necessary keys
-        SaplingExpandedSpendingKey expsk;
-        uint256 ovk;
-        if (isfromzaddr_) {
-            auto sk = boost::get<libzcash::SaplingExtendedSpendingKey>(spendingkey_);
-            expsk = sk.expsk;
-            ovk = expsk.full_viewing_key().ovk;
-        } else {
-            // Sending from a t-address, which we don't have an ovk for. Instead,
-            // generate a common one from the HD seed. This ensures the data is
-            // recoverable, while keeping it logically separate from the ZIP 32
-            // Sapling key hierarchy, which the user might not be using.
-            HDSeed seed;
-            if (!pwalletMain->GetHDSeed(seed)) {
-                throw JSONRPCError(
-                    RPC_WALLET_ERROR,
-                    "CWallet::GenerateNewSaplingZKey(): HD seed not found");
-            }
-            ovk = ovkForShieldingFromTaddr(seed);
-        }
-
-        // Set change address if we are using transparent funds
-        // TODO: Should we just use fromtaddr_ as the change address?
-        if (isfromtaddr_) {
-            LOCK2(cs_main, pwalletMain->cs_wallet);
-
-            EnsureWalletIsUnlocked();
-            CReserveKey keyChange(pwalletMain);
-            CPubKey vchPubKey;
-            bool ret = keyChange.GetReservedKey(vchPubKey);
-            if (!ret) {
-                // should never fail, as we just unlocked
-                throw JSONRPCError(
-                    RPC_WALLET_KEYPOOL_RAN_OUT,
-                    "Could not generate a taddr to use as a change address");
-            }
-
-            CTxDestination changeAddr = vchPubKey.GetID();
-            assert(builder_.SendChangeTo(changeAddr));
-        }
-
-        // Select Sapling notes
-        std::vector<SaplingOutPoint> ops;
-        std::vector<SaplingNote> notes;
-        CAmount sum = 0;
-        for (auto t : z_sapling_inputs_) {
-            ops.push_back(t.op);
-            notes.push_back(t.note);
-            sum += t.note.value();
-            if (sum >= targetAmount) {
-                break;
-            }
-        }
-
-        // Fetch Sapling anchor and witnesses
-        uint256 anchor;
-        std::vector<boost::optional<SaplingWitness>> witnesses;
-        {
-            LOCK2(cs_main, pwalletMain->cs_wallet);
-            pwalletMain->GetSaplingNoteWitnesses(ops, witnesses, anchor);
-        }
-
-        // Add Sapling spends
-        for (size_t i = 0; i < notes.size(); i++) {
-            if (!witnesses[i]) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Missing witness for Sapling note");
-            }
-            assert(builder_.AddSaplingSpend(expsk, notes[i], anchor, witnesses[i].get()));
-        }
-
-        // Add Sapling outputs
-        for (auto r : z_outputs_) {
-            auto address = std::get<0>(r);
-            auto value = std::get<1>(r);
-            auto hexMemo = std::get<2>(r);
-
-            auto addr = DecodePaymentAddress(address);
-            assert(boost::get<libzcash::SaplingPaymentAddress>(&addr) != nullptr);
-            auto to = boost::get<libzcash::SaplingPaymentAddress>(addr);
-
-            auto memo = get_memo_from_hex_string(hexMemo);
-
-            builder_.AddSaplingOutput(ovk, to, value, memo);
-        }
-
-        // Add transparent outputs
-        for (auto r : t_outputs_) {
-            auto outputAddress = std::get<0>(r);
-            auto amount = std::get<1>(r);
-
-            auto address = DecodeDestination(outputAddress);
-            if (!builder_.AddTransparentOutput(address, amount)) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid output address, not a valid taddr.");
-            }
-        }
-
-        // Build the transaction
-        auto maybe_tx = builder_.Build();
-        if (!maybe_tx) {
-            throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build transaction.");
-        }
-        tx_ = maybe_tx.get();
-
-        // Send the transaction
-        // TODO: Use CWallet::CommitTransaction instead of sendrawtransaction
-        auto signedtxn = EncodeHexTx(tx_);
-        if (!testmode) {
-            UniValue params = UniValue(UniValue::VARR);
-            params.push_back(signedtxn);
-            UniValue sendResultValue = sendrawtransaction(params, false);
-            if (sendResultValue.isNull()) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "sendrawtransaction did not return an error or a txid.");
-            }
-
-            auto txid = sendResultValue.get_str();
-
-            UniValue o(UniValue::VOBJ);
-            o.push_back(Pair("txid", txid));
-            set_result(o);
-        } else {
-            // Test mode does not send the transaction to the network.
-            UniValue o(UniValue::VOBJ);
-            o.push_back(Pair("test", 1));
-            o.push_back(Pair("txid", tx_.GetHash().ToString()));
-            o.push_back(Pair("hex", signedtxn));
-            set_result(o);
-        }
-
-        return true;
-    }
-    /**
-     * END SCENARIO #0
-     */
-
-
     // Grab the current consensus branch ID
     {
         LOCK(cs_main);
@@ -521,27 +348,27 @@ bool AsyncRPCOperation_sendmany::main_impl() {
 
     /**
      * SCENARIO #1
-     * 
+     *
      * taddr -> taddrs
-     * 
+     *
      * There are no zaddrs or joinsplits involved.
      */
     if (isPureTaddrOnlyTx) {
         add_taddr_outputs_to_tx();
-        
+
         CAmount funds = selectedUTXOAmount;
         CAmount fundsSpent = t_outputs_total + minersFee;
         CAmount change = funds - fundsSpent;
-        
+
         if (change > 0) {
-            add_taddr_change_output_to_tx(change);
+            add_taddr_change_output_to_tx(0,change);
 
             LogPrint("zrpc", "%s: transparent change in transaction output (amount=%s)\n",
                     getId(),
                     FormatMoney(change)
                     );
         }
-        
+
         UniValue obj(UniValue::VOBJ);
         obj.push_back(Pair("rawtxn", EncodeHexTx(tx_)));
         sign_send_raw_transaction(obj);
@@ -551,17 +378,18 @@ bool AsyncRPCOperation_sendmany::main_impl() {
      * END SCENARIO #1
      */
 
-    
+
     // Prepare raw transaction to handle JoinSplits
     CMutableTransaction mtx(tx_);
     crypto_sign_keypair(joinSplitPubKey_.begin(), joinSplitPrivKey_);
     mtx.joinSplitPubKey = joinSplitPubKey_;
+    mtx.nLockTime = (uint32_t)time(NULL) - 60; // jl777
     tx_ = CTransaction(mtx);
 
     // Copy zinputs and zoutputs to more flexible containers
     std::deque<SendManyInputJSOP> zInputsDeque; // zInputsDeque stores minimum numbers of notes for target amount
     CAmount tmp = 0;
-    for (auto o : z_sprout_inputs_) {
+    for (auto o : z_inputs_) {
         zInputsDeque.push_back(o);
         tmp += std::get<2>(o);
         if (tmp >= targetAmount) {
@@ -576,14 +404,14 @@ bool AsyncRPCOperation_sendmany::main_impl() {
     // When spending notes, take a snapshot of note witnesses and anchors as the treestate will
     // change upon arrival of new blocks which contain joinsplit transactions.  This is likely
     // to happen as creating a chained joinsplit transaction can take longer than the block interval.
-    if (z_sprout_inputs_.size() > 0) {
+    if (z_inputs_.size() > 0) {
         LOCK2(cs_main, pwalletMain->cs_wallet);
-        for (auto t : z_sprout_inputs_) {
+        for (auto t : z_inputs_) {
             JSOutPoint jso = std::get<0>(t);
             std::vector<JSOutPoint> vOutPoints = { jso };
             uint256 inputAnchor;
-            std::vector<boost::optional<SproutWitness>> vInputWitnesses;
-            pwalletMain->GetSproutNoteWitnesses(vOutPoints, vInputWitnesses, inputAnchor);
+            std::vector<boost::optional<ZCIncrementalWitness>> vInputWitnesses;
+            pwalletMain->GetNoteWitnesses(vOutPoints, vInputWitnesses, inputAnchor);
             jsopWitnessAnchorMap[ jso.ToString() ] = WitnessAnchorData{ vInputWitnesses[0], inputAnchor };
         }
     }
@@ -591,10 +419,10 @@ bool AsyncRPCOperation_sendmany::main_impl() {
 
     /**
      * SCENARIO #2
-     * 
+     *
      * taddr -> taddrs
      *       -> zaddrs
-     * 
+     *
      * Note: Consensus rule states that coinbase utxos can only be sent to a zaddr.
      *       Local wallet rule does not allow any change when sending coinbase utxos
      *       since there is currently no way to specify a change address and we don't
@@ -602,20 +430,20 @@ bool AsyncRPCOperation_sendmany::main_impl() {
      */
     if (isfromtaddr_) {
         add_taddr_outputs_to_tx();
-        
+
         CAmount funds = selectedUTXOAmount;
         CAmount fundsSpent = t_outputs_total + minersFee + z_outputs_total;
         CAmount change = funds - fundsSpent;
-        
+
         if (change > 0) {
             if (selectedUTXOCoinbase) {
                 assert(isSingleZaddrOutput);
                 throw JSONRPCError(RPC_WALLET_ERROR, strprintf(
-                    "Change %s not allowed. When shielding coinbase funds, the wallet does not "
+                    "Change %s not allowed. When protecting coinbase funds, the wallet does not "
                     "allow any change as there is currently no way to specify a change address "
                     "in z_sendmany.", FormatMoney(change)));
             } else {
-                add_taddr_change_output_to_tx(change);
+                add_taddr_change_output_to_tx(&fromtaddr_,change);
                 LogPrint("zrpc", "%s: transparent change in transaction output (amount=%s)\n",
                         getId(),
                         FormatMoney(change)
@@ -637,13 +465,13 @@ bool AsyncRPCOperation_sendmany::main_impl() {
                 std::string hexMemo = std::get<2>(smr);
                 zOutputsDeque.pop_front();
 
-                PaymentAddress pa = DecodePaymentAddress(address);
-                JSOutput jso = JSOutput(boost::get<libzcash::SproutPaymentAddress>(pa), value);
+                PaymentAddress pa = CZCPaymentAddress(address).Get();
+                JSOutput jso = JSOutput(pa, value);
                 if (hexMemo.size() > 0) {
                     jso.memo = get_memo_from_hex_string(hexMemo);
                 }
                 info.vjsout.push_back(jso);
-                
+
                 // Funds are removed from the value pool and enter the private pool
                 info.vpub_old += value;
             }
@@ -654,16 +482,16 @@ bool AsyncRPCOperation_sendmany::main_impl() {
     }
     /**
      * END SCENARIO #2
-     */   
- 
-    
-    
+     */
+
+
+
     /**
      * SCENARIO #3
-     * 
+     *
      * zaddr -> taddrs
      *       -> zaddrs
-     * 
+     *
      * Send to zaddrs by chaining JoinSplits together and immediately consuming any change
      * Send to taddrs by creating dummy z outputs and accumulating value in a change note
      * which is used to set vpub_new in the last chained joinsplit.
@@ -679,7 +507,7 @@ bool AsyncRPCOperation_sendmany::main_impl() {
     }
 
     // Keep track of treestate within this transaction
-    boost::unordered_map<uint256, SproutMerkleTree, CCoinsKeyHasher> intermediates;
+    boost::unordered_map<uint256, ZCIncrementalMerkleTree, CCoinsKeyHasher> intermediates;
     std::vector<uint256> previousCommitments;
 
     while (!vpubNewProcessed) {
@@ -689,7 +517,7 @@ bool AsyncRPCOperation_sendmany::main_impl() {
 
         CAmount jsInputValue = 0;
         uint256 jsAnchor;
-        std::vector<boost::optional<SproutWitness>> witnesses;
+        std::vector<boost::optional<ZCIncrementalWitness>> witnesses;
 
         JSDescription prevJoinSplit;
 
@@ -711,16 +539,16 @@ bool AsyncRPCOperation_sendmany::main_impl() {
             LOCK2(cs_main, pwalletMain->cs_wallet);
 
             // Update tree state with previous joinsplit
-            SproutMerkleTree tree;
+            ZCIncrementalMerkleTree tree;
             auto it = intermediates.find(prevJoinSplit.anchor);
             if (it != intermediates.end()) {
                 tree = it->second;
-            } else if (!pcoinsTip->GetSproutAnchorAt(prevJoinSplit.anchor, tree)) {
+            } else if (!pcoinsTip->GetAnchorAt(prevJoinSplit.anchor, tree)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Could not find previous JoinSplit anchor");
             }
 
             assert(changeOutputIndex != -1);
-            boost::optional<SproutWitness> changeWitness;
+            boost::optional<ZCIncrementalWitness> changeWitness;
             int n = 0;
             for (const uint256& commitment : prevJoinSplit.commitments) {
                 tree.append(commitment);
@@ -738,24 +566,24 @@ bool AsyncRPCOperation_sendmany::main_impl() {
             intermediates.insert(std::make_pair(tree.root(), tree));    // chained js are interstitial (found in between block boundaries)
 
             // Decrypt the change note's ciphertext to retrieve some data we need
-            ZCNoteDecryption decryptor(boost::get<libzcash::SproutSpendingKey>(spendingkey_).receiving_key());
+            ZCNoteDecryption decryptor(spendingkey_.receiving_key());
             auto hSig = prevJoinSplit.h_sig(*pzcashParams, tx_.joinSplitPubKey);
             try {
-                SproutNotePlaintext plaintext = SproutNotePlaintext::decrypt(
+                NotePlaintext plaintext = NotePlaintext::decrypt(
                         decryptor,
                         prevJoinSplit.ciphertexts[changeOutputIndex],
                         prevJoinSplit.ephemeralKey,
                         hSig,
                         (unsigned char) changeOutputIndex);
 
-                SproutNote note = plaintext.note(boost::get<libzcash::SproutPaymentAddress>(frompaymentaddress_));
+                Note note = plaintext.note(frompaymentaddress_);
                 info.notes.push_back(note);
 
-                jsInputValue += plaintext.value();
+                jsInputValue += plaintext.value;
 
                 LogPrint("zrpcunsafe", "%s: spending change (amount=%s)\n",
                     getId(),
-                    FormatMoney(plaintext.value())
+                    FormatMoney(plaintext.value)
                     );
 
             } catch (const std::exception& e) {
@@ -767,15 +595,15 @@ bool AsyncRPCOperation_sendmany::main_impl() {
         //
         // Consume spendable non-change notes
         //
-        std::vector<SproutNote> vInputNotes;
+        std::vector<Note> vInputNotes;
         std::vector<JSOutPoint> vOutPoints;
-        std::vector<boost::optional<SproutWitness>> vInputWitnesses;
+        std::vector<boost::optional<ZCIncrementalWitness>> vInputWitnesses;
         uint256 inputAnchor;
         int numInputsNeeded = (jsChange>0) ? 1 : 0;
         while (numInputsNeeded++ < ZC_NUM_JS_INPUTS && zInputsDeque.size() > 0) {
             SendManyInputJSOP t = zInputsDeque.front();
             JSOutPoint jso = std::get<0>(t);
-            SproutNote note = std::get<1>(t);
+            Note note = std::get<1>(t);
             CAmount noteFunds = std::get<2>(t);
             zInputsDeque.pop_front();
 
@@ -826,7 +654,7 @@ bool AsyncRPCOperation_sendmany::main_impl() {
                 if (!optionalWitness) {
                     throw JSONRPCError(RPC_WALLET_ERROR, "Witness for note commitment is null");
                 }
-                SproutWitness w = *optionalWitness; // could use .get();
+                ZCIncrementalWitness w = *optionalWitness; // could use .get();
                 if (jsChange > 0) {
                     for (const uint256& commitment : previousCommitments) {
                         w.append(commitment);
@@ -896,9 +724,8 @@ bool AsyncRPCOperation_sendmany::main_impl() {
             assert(value==0);
             info.vjsout.push_back(JSOutput());  // dummy output while we accumulate funds into a change note for vpub_new
         } else {
-            PaymentAddress pa = DecodePaymentAddress(address);
-            // If we are here, we know we have no Sapling outputs.
-            JSOutput jso = JSOutput(boost::get<libzcash::SproutPaymentAddress>(pa), value);
+            PaymentAddress pa = CZCPaymentAddress(address).Get();
+            JSOutput jso = JSOutput(pa, value);
             if (hexMemo.size() > 0) {
                 jso.memo = get_memo_from_hex_string(hexMemo);
             }
@@ -907,7 +734,7 @@ bool AsyncRPCOperation_sendmany::main_impl() {
 
         // create output for any change
         if (jsChange>0) {
-            info.vjsout.push_back(JSOutput(boost::get<libzcash::SproutPaymentAddress>(frompaymentaddress_), jsChange));
+            info.vjsout.push_back(JSOutput(frompaymentaddress_, jsChange));
 
             LogPrint("zrpcunsafe", "%s: generating note for change (amount=%s)\n",
                     getId(),
@@ -937,7 +764,7 @@ bool AsyncRPCOperation_sendmany::main_impl() {
  * Raw transaction as hex string should be in object field "rawtxn"
  */
 void AsyncRPCOperation_sendmany::sign_send_raw_transaction(UniValue obj)
-{   
+{
     // Sign the raw transaction
     UniValue rawtxnValue = find_value(obj, "rawtxn");
     if (rawtxnValue.isNull()) {
@@ -1000,8 +827,7 @@ void AsyncRPCOperation_sendmany::sign_send_raw_transaction(UniValue obj)
 
 
 bool AsyncRPCOperation_sendmany::find_utxos(bool fAcceptCoinbase=false) {
-    std::set<CTxDestination> destinations;
-    destinations.insert(fromtaddr_);
+    set<CBitcoinAddress> setAddress = {fromtaddr_};
     vector<COutput> vecOutputs;
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
@@ -1017,13 +843,13 @@ bool AsyncRPCOperation_sendmany::find_utxos(bool fAcceptCoinbase=false) {
             continue;
         }
 
-        if (destinations.size()) {
+        if (setAddress.size()) {
             CTxDestination address;
             if (!ExtractDestination(out.tx->vout[out.i].scriptPubKey, address)) {
                 continue;
             }
 
-            if (!destinations.count(address)) {
+            if (!setAddress.count(address)) {
                 continue;
             }
         }
@@ -1049,87 +875,61 @@ bool AsyncRPCOperation_sendmany::find_utxos(bool fAcceptCoinbase=false) {
 
 
 bool AsyncRPCOperation_sendmany::find_unspent_notes() {
-    std::vector<CSproutNotePlaintextEntry> sproutEntries;
-    std::vector<SaplingNoteEntry> saplingEntries;
+    std::vector<CNotePlaintextEntry> entries;
     {
         LOCK2(cs_main, pwalletMain->cs_wallet);
-        pwalletMain->GetFilteredNotes(sproutEntries, saplingEntries, fromaddress_, mindepth_);
+        pwalletMain->GetFilteredNotes(entries, fromaddress_, mindepth_);
     }
 
-    // If using the TransactionBuilder, we only want Sapling notes.
-    // If not using it, we only want Sprout notes.
-    // TODO: Refactor `GetFilteredNotes()` so we only fetch what we need.
-    if (isUsingBuilder_) {
-        sproutEntries.clear();
-    } else {
-        saplingEntries.clear();
-    }
-
-    for (CSproutNotePlaintextEntry & entry : sproutEntries) {
-        z_sprout_inputs_.push_back(SendManyInputJSOP(entry.jsop, entry.plaintext.note(boost::get<libzcash::SproutPaymentAddress>(frompaymentaddress_)), CAmount(entry.plaintext.value())));
-        std::string data(entry.plaintext.memo().begin(), entry.plaintext.memo().end());
-        LogPrint("zrpcunsafe", "%s: found unspent Sprout note (txid=%s, vjoinsplit=%d, ciphertext=%d, amount=%s, memo=%s)\n",
+    for (CNotePlaintextEntry & entry : entries) {
+        z_inputs_.push_back(SendManyInputJSOP(entry.jsop, entry.plaintext.note(frompaymentaddress_), CAmount(entry.plaintext.value)));
+        std::string data(entry.plaintext.memo.begin(), entry.plaintext.memo.end());
+        LogPrint("zrpcunsafe", "%s: found unspent note (txid=%s, vjoinsplit=%d, ciphertext=%d, amount=%s, memo=%s)\n",
             getId(),
             entry.jsop.hash.ToString().substr(0, 10),
             entry.jsop.js,
             int(entry.jsop.n),  // uint8_t
-            FormatMoney(entry.plaintext.value()),
+            FormatMoney(entry.plaintext.value),
             HexStr(data).substr(0, 10)
             );
     }
 
-    for (auto entry : saplingEntries) {
-        z_sapling_inputs_.push_back(entry);
-        std::string data(entry.memo.begin(), entry.memo.end());
-        LogPrint("zrpcunsafe", "%s: found unspent Sapling note (txid=%s, vShieldedSpend=%d, amount=%s, memo=%s)\n",
-            getId(),
-            entry.op.hash.ToString().substr(0, 10),
-            entry.op.n,
-            FormatMoney(entry.note.value()),
-            HexStr(data).substr(0, 10));
-    }
-
-    if (z_sprout_inputs_.empty() && z_sapling_inputs_.empty()) {
+    if (z_inputs_.size() == 0) {
         return false;
     }
 
     // sort in descending order, so big notes appear first
-    std::sort(z_sprout_inputs_.begin(), z_sprout_inputs_.end(),
-        [](SendManyInputJSOP i, SendManyInputJSOP j) -> bool {
-            return std::get<2>(i) > std::get<2>(j);
-        });
-    std::sort(z_sapling_inputs_.begin(), z_sapling_inputs_.end(),
-        [](SaplingNoteEntry i, SaplingNoteEntry j) -> bool {
-            return i.note.value() > j.note.value();
-        });
+    std::sort(z_inputs_.begin(), z_inputs_.end(), [](SendManyInputJSOP i, SendManyInputJSOP j) -> bool {
+        return ( std::get<2>(i) > std::get<2>(j));
+    });
 
     return true;
 }
 
 UniValue AsyncRPCOperation_sendmany::perform_joinsplit(AsyncJoinSplitInfo & info) {
-    std::vector<boost::optional < SproutWitness>> witnesses;
+    std::vector<boost::optional < ZCIncrementalWitness>> witnesses;
     uint256 anchor;
     {
         LOCK(cs_main);
-        anchor = pcoinsTip->GetBestAnchor(SPROUT);    // As there are no inputs, ask the wallet for the best anchor
+        anchor = pcoinsTip->GetBestAnchor();    // As there are no inputs, ask the wallet for the best anchor
     }
     return perform_joinsplit(info, witnesses, anchor);
 }
 
 
 UniValue AsyncRPCOperation_sendmany::perform_joinsplit(AsyncJoinSplitInfo & info, std::vector<JSOutPoint> & outPoints) {
-    std::vector<boost::optional < SproutWitness>> witnesses;
+    std::vector<boost::optional < ZCIncrementalWitness>> witnesses;
     uint256 anchor;
     {
         LOCK(cs_main);
-        pwalletMain->GetSproutNoteWitnesses(outPoints, witnesses, anchor);
+        pwalletMain->GetNoteWitnesses(outPoints, witnesses, anchor);
     }
     return perform_joinsplit(info, witnesses, anchor);
 }
 
 UniValue AsyncRPCOperation_sendmany::perform_joinsplit(
         AsyncJoinSplitInfo & info,
-        std::vector<boost::optional < SproutWitness>> witnesses,
+        std::vector<boost::optional < ZCIncrementalWitness>> witnesses,
         uint256 anchor)
 {
     if (anchor.IsNull()) {
@@ -1144,7 +944,7 @@ UniValue AsyncRPCOperation_sendmany::perform_joinsplit(
         if (!witnesses[i]) {
             throw runtime_error("joinsplit input could not be found in tree");
         }
-        info.vjsin.push_back(JSInput(*witnesses[i], info.notes[i], boost::get<libzcash::SproutSpendingKey>(spendingkey_)));
+        info.vjsin.push_back(JSInput(*witnesses[i], info.notes[i], spendingkey_));
     }
 
     // Make sure there are two inputs and two outputs
@@ -1166,22 +966,25 @@ UniValue AsyncRPCOperation_sendmany::perform_joinsplit(
             getId(),
             tx_.vjoinsplit.size(),
             FormatMoney(info.vpub_old), FormatMoney(info.vpub_new),
-            FormatMoney(info.vjsin[0].note.value()), FormatMoney(info.vjsin[1].note.value()),
+            FormatMoney(info.vjsin[0].note.value), FormatMoney(info.vjsin[1].note.value),
             FormatMoney(info.vjsout[0].value), FormatMoney(info.vjsout[1].value)
             );
 
     // Generate the proof, this can take over a minute.
-    std::array<libzcash::JSInput, ZC_NUM_JS_INPUTS> inputs
+    boost::array<libzcash::JSInput, ZC_NUM_JS_INPUTS> inputs
             {info.vjsin[0], info.vjsin[1]};
-    std::array<libzcash::JSOutput, ZC_NUM_JS_OUTPUTS> outputs
+    boost::array<libzcash::JSOutput, ZC_NUM_JS_OUTPUTS> outputs
             {info.vjsout[0], info.vjsout[1]};
-    std::array<size_t, ZC_NUM_JS_INPUTS> inputMap;
-    std::array<size_t, ZC_NUM_JS_OUTPUTS> outputMap;
-
+#ifdef __LP64__
+    boost::array<uint64_t, ZC_NUM_JS_INPUTS> inputMap;
+    boost::array<uint64_t, ZC_NUM_JS_OUTPUTS> outputMap;
+#else
+    boost::array<size_t, ZC_NUM_JS_INPUTS> inputMap;
+    boost::array<size_t, ZC_NUM_JS_OUTPUTS> outputMap;
+#endif
     uint256 esk; // payment disclosure - secret
 
     JSDescription jsdesc = JSDescription::Randomized(
-            mtx.fOverwintered && (mtx.nVersion >= SAPLING_TX_VERSION),
             *pzcashParams,
             joinSplitPubKey_,
             anchor,
@@ -1255,10 +1058,10 @@ UniValue AsyncRPCOperation_sendmany::perform_joinsplit(
     UniValue arrInputMap(UniValue::VARR);
     UniValue arrOutputMap(UniValue::VARR);
     for (size_t i = 0; i < ZC_NUM_JS_INPUTS; i++) {
-        arrInputMap.push_back(static_cast<uint64_t>(inputMap[i]));
+        arrInputMap.push_back(inputMap[i]);
     }
     for (size_t i = 0; i < ZC_NUM_JS_OUTPUTS; i++) {
-        arrOutputMap.push_back(static_cast<uint64_t>(outputMap[i]));
+        arrOutputMap.push_back(outputMap[i]);
     }
 
 
@@ -1274,11 +1077,12 @@ UniValue AsyncRPCOperation_sendmany::perform_joinsplit(
         // placeholder for txid will be filled in later when tx has been finalized and signed.
         PaymentDisclosureKey pdKey = {placeholder, js_index, mapped_index};
         JSOutput output = outputs[mapped_index];
-        libzcash::SproutPaymentAddress zaddr = output.addr;  // randomized output
+        libzcash::PaymentAddress zaddr = output.addr;  // randomized output
         PaymentDisclosureInfo pdInfo = {PAYMENT_DISCLOSURE_VERSION_EXPERIMENTAL, esk, joinSplitPrivKey, zaddr};
         paymentDisclosureData_.push_back(PaymentDisclosureKeyInfo(pdKey, pdInfo));
 
-        LogPrint("paymentdisclosure", "%s: Payment Disclosure: js=%d, n=%d, zaddr=%s\n", getId(), js_index, int(mapped_index), EncodePaymentAddress(zaddr));
+        CZCPaymentAddress address(zaddr);
+        LogPrint("paymentdisclosure", "%s: Payment Disclosure: js=%d, n=%d, zaddr=%s\n", getId(), js_index, int(mapped_index), address.ToString());
     }
     // !!! Payment disclosure END
 
@@ -1299,42 +1103,49 @@ void AsyncRPCOperation_sendmany::add_taddr_outputs_to_tx() {
         std::string outputAddress = std::get<0>(r);
         CAmount nAmount = std::get<1>(r);
 
-        CTxDestination address = DecodeDestination(outputAddress);
-        if (!IsValidDestination(address)) {
+        CBitcoinAddress address(outputAddress);
+        if (!address.IsValid()) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid output address, not a valid taddr.");
         }
 
-        CScript scriptPubKey = GetScriptForDestination(address);
+        CScript scriptPubKey = GetScriptForDestination(address.Get());
 
         CTxOut out(nAmount, scriptPubKey);
         rawTx.vout.push_back(out);
     }
-
+    rawTx.nLockTime = (uint32_t)time(NULL) - 60; // jl777
     tx_ = CTransaction(rawTx);
 }
 
-void AsyncRPCOperation_sendmany::add_taddr_change_output_to_tx(CAmount amount) {
+void AsyncRPCOperation_sendmany::add_taddr_change_output_to_tx(CBitcoinAddress *fromaddress,CAmount amount) {
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
     EnsureWalletIsUnlocked();
+    CScript scriptPubKey;
     CReserveKey keyChange(pwalletMain);
     CPubKey vchPubKey;
-    bool ret = keyChange.GetReservedKey(vchPubKey);
-    if (!ret) {
-        throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Could not generate a taddr to use as a change address"); // should never fail, as we just unlocked
+    if ( fromaddress != 0 )
+        scriptPubKey = GetScriptForDestination(fromaddress->Get());
+    else
+    {
+        bool ret = keyChange.GetReservedKey(vchPubKey);
+        if (!ret) {
+            throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Could not generate a taddr to use as a change address"); // should never fail, as we just unlocked
+        }
+        scriptPubKey = GetScriptForDestination(vchPubKey.GetID());
     }
-    CScript scriptPubKey = GetScriptForDestination(vchPubKey.GetID());
     CTxOut out(amount, scriptPubKey);
 
     CMutableTransaction rawTx(tx_);
     rawTx.vout.push_back(out);
+    rawTx.nLockTime = (uint32_t)time(NULL) - 60; // jl777
     tx_ = CTransaction(rawTx);
 }
 
-std::array<unsigned char, ZC_MEMO_SIZE> AsyncRPCOperation_sendmany::get_memo_from_hex_string(std::string s) {
-    std::array<unsigned char, ZC_MEMO_SIZE> memo = {{0x00}};
-    
+boost::array<unsigned char, ZC_MEMO_SIZE> AsyncRPCOperation_sendmany::get_memo_from_hex_string(std::string s) {
+    boost::array<unsigned char, ZC_MEMO_SIZE> memo = {{0x00}};
+
     std::vector<unsigned char> rawMemo = ParseHex(s.c_str());
 
     // If ParseHex comes across a non-hex char, it will stop but still return results so far.
@@ -1342,11 +1153,11 @@ std::array<unsigned char, ZC_MEMO_SIZE> AsyncRPCOperation_sendmany::get_memo_fro
     if (slen % 2 !=0 || (slen>0 && rawMemo.size()!=slen/2)) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Memo must be in hexadecimal format");
     }
-    
+
     if (rawMemo.size() > ZC_MEMO_SIZE) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Memo size of %d is too big, maximum allowed is %d", rawMemo.size(), ZC_MEMO_SIZE));
     }
-    
+
     // copy vector into boost array
     int lenMemo = rawMemo.size();
     for (int i = 0; i < ZC_MEMO_SIZE && i < lenMemo; i++) {
@@ -1369,4 +1180,3 @@ UniValue AsyncRPCOperation_sendmany::getStatus() const {
     obj.push_back(Pair("params", contextinfo_ ));
     return obj;
 }
-

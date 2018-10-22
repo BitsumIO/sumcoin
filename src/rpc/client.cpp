@@ -99,6 +99,15 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "prioritisetransaction", 2 },
     { "setban", 2 },
     { "setban", 3 },
+    { "getblockhashes", 0 },
+    { "getblockhashes", 1 },
+    { "getblockhashes", 2 },
+    { "getspentinfo", 0},
+    { "getaddresstxids", 0},
+    { "getaddressbalance", 0},
+    { "getaddressdeltas", 0},
+    { "getaddressutxos", 0},
+    { "getaddressmempool", 0},
     { "zcrawjoinsplit", 1 },
     { "zcrawjoinsplit", 2 },
     { "zcrawjoinsplit", 3 },
@@ -127,10 +136,24 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "z_shieldcoinbase", 3},
     { "z_getoperationstatus", 0},
     { "z_getoperationresult", 0},
+    { "z_importkey", 1 },
+    { "paxprice", 4 },
+    { "paxprices", 3 },
+    { "paxpending", 0 },
+    { "notaries", 2 },
+    { "minerids", 1 },
+    { "kvsearch", 1 },
+    { "kvupdate", 4 },
     { "z_importkey", 2 },
     { "z_importviewingkey", 2 },
     { "z_getpaymentdisclosure", 1},
-    { "z_getpaymentdisclosure", 2}
+    { "z_getpaymentdisclosure", 2},
+    // crosschain
+    { "assetchainproof", 1},
+    { "crosschainproof", 1},
+    { "getproofroot", 2},
+    { "height_MoM", 1},
+    { "calc_MoM", 2},
 };
 
 class CRPCConvertTable
@@ -167,7 +190,7 @@ UniValue ParseNonRFCJSONValue(const std::string& strVal)
     UniValue jVal;
     if (!jVal.read(std::string("[")+strVal+std::string("]")) ||
         !jVal.isArray() || jVal.size()!=1)
-        throw runtime_error(string("Error parsing JSON:")+strVal);
+        throw runtime_error(string("Error JSON:")+strVal);
     return jVal[0];
 }
 
@@ -178,7 +201,6 @@ UniValue RPCConvertValues(const std::string &strMethod, const std::vector<std::s
 
     for (unsigned int idx = 0; idx < strParams.size(); idx++) {
         const std::string& strVal = strParams[idx];
-
         if (!rpcCvtTable.convert(strMethod, idx)) {
             // insert string value directly
             params.push_back(strVal);

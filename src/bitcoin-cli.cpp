@@ -5,8 +5,8 @@
 
 #include "chainparamsbase.h"
 #include "clientversion.h"
-#include "rpc/client.h"
-#include "rpc/protocol.h"
+#include "rpcclient.h"
+#include "rpcprotocol.h"
 #include "util.h"
 #include "utilstrencodings.h"
 
@@ -19,15 +19,19 @@
 
 #include <univalue.h>
 
+using namespace std;
+
+int64_t MAX_MONEY = 200000000 * 100000000LL;
+uint64_t komodo_maxallowed(int32_t baseid) { return(100000000LL * 1000000); } // stub
+
 static const int DEFAULT_HTTP_CLIENT_TIMEOUT=900;
-static const int CONTINUE_EXECUTION=-1;
 
 std::string HelpMessageCli()
 {
-    std::string strUsage;
+    string strUsage;
     strUsage += HelpMessageGroup(_("Options:"));
     strUsage += HelpMessageOpt("-?", _("This help message"));
-    strUsage += HelpMessageOpt("-conf=<file>", strprintf(_("Specify configuration file (default: %s)"), "zcash.conf"));
+    strUsage += HelpMessageOpt("-conf=<file>", strprintf(_("Specify configuration file (default: %s)"), "komodo.conf"));
     strUsage += HelpMessageOpt("-datadir=<dir>", _("Specify data directory"));
     strUsage += HelpMessageOpt("-testnet", _("Use the test network"));
     strUsage += HelpMessageOpt("-regtest", _("Enter regression test mode, which uses a special chain in which blocks can be "
@@ -38,7 +42,6 @@ std::string HelpMessageCli()
     strUsage += HelpMessageOpt("-rpcuser=<user>", _("Username for JSON-RPC connections"));
     strUsage += HelpMessageOpt("-rpcpassword=<pw>", _("Password for JSON-RPC connections"));
     strUsage += HelpMessageOpt("-rpcclienttimeout=<n>", strprintf(_("Timeout in seconds during HTTP requests, or 0 for no timeout. (default: %d)"), DEFAULT_HTTP_CLIENT_TIMEOUT));
-    strUsage += HelpMessageOpt("-stdin", _("Read extra arguments from standard input, one per line until EOF/Ctrl-D (recommended for sensitive information such as passphrases)"));
 
     return strUsage;
 }
@@ -62,27 +65,41 @@ public:
 
 };
 
-//
-// This function returns either one of EXIT_ codes when it's expected to stop the process or
-// CONTINUE_EXECUTION when it's expected to continue further.
-//
-static int AppInitRPC(int argc, char* argv[])
+#define FROM_CLI
+#include "uint256.h"
+#include "arith_uint256.h"
+
+#include "komodo_structs.h"
+
+#include "komodo_globals.h"
+#include "komodo_utils.h"
+#include "komodo_cJSON.c"
+#include "komodo_notary.h"
+
+void komodo_stateupdate(int32_t height,uint8_t notarypubs[][33],uint8_t numnotaries,uint8_t notaryid,uint256 txhash,uint64_t voutmask,uint8_t numvouts,uint32_t *pvals,uint8_t numpvals,int32_t KMDheight,uint32_t KMDtimestamp,uint64_t opretvalue,uint8_t *opretbuf,uint16_t opretlen,uint16_t vout,uint256 MoM,int32_t MoMdepth)
 {
-    static_assert(CONTINUE_EXECUTION != EXIT_FAILURE,
-                  "CONTINUE_EXECUTION should be different from EXIT_FAILURE");
-    static_assert(CONTINUE_EXECUTION != EXIT_SUCCESS,
-                  "CONTINUE_EXECUTION should be different from EXIT_SUCCESS");
+    
+}
+
+uint32_t komodo_heightstamp(int32_t height)
+{
+    return(0);
+}
+
+static bool AppInitRPC(int argc, char* argv[])
+{
     //
     // Parameters
     //
     ParseParameters(argc, argv);
+    komodo_args(argv[0]);
     if (argc<2 || mapArgs.count("-?") || mapArgs.count("-h") || mapArgs.count("-help") || mapArgs.count("-version")) {
-        std::string strUsage = _("Zcash RPC client version") + " " + FormatFullVersion() + "\n" + PrivacyInfo();
+        std::string strUsage = _("Komodo RPC client version") + " " + FormatFullVersion() + "\n" + PrivacyInfo();
         if (!mapArgs.count("-version")) {
             strUsage += "\n" + _("Usage:") + "\n" +
-                  "  zcash-cli [options] <command> [params]  " + _("Send command to Zcash") + "\n" +
-                  "  zcash-cli [options] help                " + _("List commands") + "\n" +
-                  "  zcash-cli [options] help <command>      " + _("Get help for a command") + "\n";
+                  "  komodo-cli [options] <command> [params]  " + _("Send command to Komodo") + "\n" +
+                  "  komodo-cli [options] help                " + _("List commands") + "\n" +
+                  "  komodo-cli [options] help <command>      " + _("Get help for a command") + "\n";
 
             strUsage += "\n" + HelpMessageCli();
         } else {
@@ -90,33 +107,29 @@ static int AppInitRPC(int argc, char* argv[])
         }
 
         fprintf(stdout, "%s", strUsage.c_str());
-        if (argc < 2) {
-            fprintf(stderr, "Error: too few parameters\n");
-            return EXIT_FAILURE;
-        }
-        return EXIT_SUCCESS;
+        return false;
     }
     if (!boost::filesystem::is_directory(GetDataDir(false))) {
         fprintf(stderr, "Error: Specified data directory \"%s\" does not exist.\n", mapArgs["-datadir"].c_str());
-        return EXIT_FAILURE;
+        return false;
     }
     try {
         ReadConfigFile(mapArgs, mapMultiArgs);
     } catch (const std::exception& e) {
         fprintf(stderr,"Error reading configuration file: %s\n", e.what());
-        return EXIT_FAILURE;
+        return false;
     }
     // Check for -testnet or -regtest parameter (BaseParams() calls are only valid after this clause)
     if (!SelectBaseParamsFromCommandLine()) {
         fprintf(stderr, "Error: Invalid combination of -regtest and -testnet.\n");
-        return EXIT_FAILURE;
+        return false;
     }
     if (GetBoolArg("-rpcssl", false))
     {
         fprintf(stderr, "Error: SSL mode for RPC (-rpcssl) is no longer supported.\n");
-        return EXIT_FAILURE;
+        return false;
     }
-    return CONTINUE_EXECUTION;
+    return true;
 }
 
 
@@ -185,11 +198,11 @@ static void http_error_cb(enum evhttp_request_error err, void *ctx)
 }
 #endif
 
-UniValue CallRPC(const std::string& strMethod, const UniValue& params)
+UniValue CallRPC(const string& strMethod, const UniValue& params)
 {
     std::string host = GetArg("-rpcconnect", "127.0.0.1");
     int port = GetArg("-rpcport", BaseParams().RPCPort());
-
+    BITCOIND_RPCPORT = port;
     // Obtain event base
     raii_event_base base = obtain_event_base();
 
@@ -200,7 +213,7 @@ UniValue CallRPC(const std::string& strMethod, const UniValue& params)
     HTTPReply response;
     raii_evhttp_request req = obtain_evhttp_request(http_request_done, (void*)&response);
     if (req == NULL)
-        throw std::runtime_error("create http request failed");
+        throw runtime_error("create http request failed");
 #if LIBEVENT_VERSION_NUMBER >= 0x02010300
     evhttp_request_set_error_cb(req.get(), http_error_cb);
 #endif
@@ -210,7 +223,7 @@ UniValue CallRPC(const std::string& strMethod, const UniValue& params)
     if (mapArgs["-rpcpassword"] == "") {
         // Try fall back to cookie-based authentication if no password is provided
         if (!GetAuthCookie(&strRPCUserColonPass)) {
-            throw std::runtime_error(strprintf(
+            throw runtime_error(strprintf(
                 _("Could not locate RPC credentials. No authentication cookie could be found,\n"
                   "and no rpcpassword is set in the configuration file (%s)."),
                     GetConfigFile().string().c_str()));
@@ -243,26 +256,26 @@ UniValue CallRPC(const std::string& strMethod, const UniValue& params)
     if (response.status == 0)
         throw CConnectionFailed(strprintf("couldn't connect to server: %s (code %d)\n(make sure server is running and you are connecting to the correct RPC port)", http_errorstring(response.error), response.error));
     else if (response.status == HTTP_UNAUTHORIZED)
-        throw std::runtime_error("incorrect rpcuser or rpcpassword (authorization failed)");
+        throw runtime_error("incorrect rpcuser or rpcpassword (authorization failed)");
     else if (response.status >= 400 && response.status != HTTP_BAD_REQUEST && response.status != HTTP_NOT_FOUND && response.status != HTTP_INTERNAL_SERVER_ERROR)
-        throw std::runtime_error(strprintf("server returned HTTP error %d", response.status));
+        throw runtime_error(strprintf("server returned HTTP error %d", response.status));
     else if (response.body.empty())
-        throw std::runtime_error("no response from server");
+        throw runtime_error("no response from server");
 
     // Parse reply
     UniValue valReply(UniValue::VSTR);
     if (!valReply.read(response.body))
-        throw std::runtime_error("couldn't parse reply from server");
+        throw runtime_error("couldn't parse reply from server");
     const UniValue& reply = valReply.get_obj();
     if (reply.empty())
-        throw std::runtime_error("expected reply to have result, error and id properties");
+        throw runtime_error("expected reply to have result, error and id properties");
 
     return reply;
 }
 
 int CommandLineRPC(int argc, char *argv[])
 {
-    std::string strPrint;
+    string strPrint;
     int nRet = 0;
     try {
         // Skip switches
@@ -270,17 +283,15 @@ int CommandLineRPC(int argc, char *argv[])
             argc--;
             argv++;
         }
-        std::vector<std::string> args = std::vector<std::string>(&argv[1], &argv[argc]);
-        if (GetBoolArg("-stdin", false)) {
-            // Read one arg per line from stdin and append
-            std::string line;
-            while (std::getline(std::cin,line))
-                args.push_back(line);
-        }
-        if (args.size() < 1)
-            throw std::runtime_error("too few parameters (need at least command)");
-        std::string strMethod = args[0];
-        UniValue params = RPCConvertValues(strMethod, std::vector<std::string>(args.begin()+1, args.end()));
+
+        // Method
+        if (argc < 2)
+            throw runtime_error("too few parameters");
+        string strMethod = argv[1];
+
+        // Parameters default to strings
+        std::vector<std::string> strParams(&argv[2], &argv[argc]);
+        UniValue params = RPCConvertValues(strMethod, strParams);
 
         // Execute and handle connection failures with -rpcwait
         const bool fWait = GetBoolArg("-rpcwait", false);
@@ -332,7 +343,7 @@ int CommandLineRPC(int argc, char *argv[])
         throw;
     }
     catch (const std::exception& e) {
-        strPrint = std::string("error: ") + e.what();
+        strPrint = string("error: ") + e.what();
         nRet = EXIT_FAILURE;
     }
     catch (...) {
@@ -351,13 +362,12 @@ int main(int argc, char* argv[])
     SetupEnvironment();
     if (!SetupNetworking()) {
         fprintf(stderr, "Error: Initializing networking failed\n");
-        return EXIT_FAILURE;
+        exit(1);
     }
 
     try {
-        int ret = AppInitRPC(argc, argv);
-        if (ret != CONTINUE_EXECUTION)
-            return ret;
+        if(!AppInitRPC(argc, argv))
+            return EXIT_FAILURE;
     }
     catch (const std::exception& e) {
         PrintExceptionContinue(&e, "AppInitRPC()");

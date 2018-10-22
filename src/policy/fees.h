@@ -120,14 +120,11 @@ private:
     std::vector<int> oldUnconfTxs;
 
 public:
-    /** Find the bucket index of a given value */
     unsigned int FindBucketIndex(double val);
-
     /**
      * Initialize the data structures.  This is called by BlockPolicyEstimator's
      * constructor with default values.  A final bucket is created implicitly for
      * values greater than the last upper limit in defaultBuckets.
-     *
      * @param defaultBuckets contains the upper limits for the bucket boundaries
      * @param maxConfirms max number of confirms to track
      * @param decay how much to decay the historical moving average per block
