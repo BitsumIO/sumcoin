@@ -124,4 +124,4 @@ src/komodo-tx.exe
 #output during builds, symbol tables?
 *.dSYM
 
-./verus-cli
+verus-cli
