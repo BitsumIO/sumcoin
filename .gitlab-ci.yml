@@ -6,7 +6,7 @@ stages:
 ####START####                                     PROJECT LEVEL VARIABLES                                  ####START####
 ########################################################################################################################
 variables:
-  VERSION: 0.4.0b
+  VERSION: 0.1.0b
   BITSUM_CLI_LINUX: Bitsum-CLI-Linux-v${VERSION}.tar.gz
   BITSUM_CLI_WINDOWS: Bitsum-CLI-Windows-v${VERSION}.zip
   BITSUM_CLI_MACOS: Bitsum-CLI-MacOS-v${VERSION}.tar.gz

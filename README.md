@@ -1,4 +1,4 @@
-## SumCoin version 0.4.0b
+## SumCoin version 0.1.0b
 
 SumCoin is a new, mineable and stakeable cryptocurrency. It is a live fork of Komodo that retains its Zcash lineage and improves it. SumCoin will leverage the Komodo platform and dPoW notarization for enhanced security and cross-chain interoperability. We have added a variation of a zawy12, lwma difficulty algorithm, a new CPU-optimized hash algorithm and a new algorithm for fair proof of stake.
 - [BitSum web site https://bitsum.io/ Wallets and CLI tools](https://bitsum.io/)
