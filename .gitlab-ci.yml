@@ -7,9 +7,9 @@ stages:
 ########################################################################################################################
 variables:
   VERSION: 0.4.0b
-  VERUS_CLI_LINUX: Verus-CLI-Linux-v${VERSION}.tar.gz
-  VERUS_CLI_WINDOWS: Verus-CLI-Windows-v${VERSION}.zip
-  VERUS_CLI_MACOS: Verus-CLI-MacOS-v${VERSION}.tar.gz
+  BITSUM_CLI_LINUX: Bitsum-CLI-Linux-v${VERSION}.tar.gz
+  BITSUM_CLI_WINDOWS: Bitsum-CLI-Windows-v${VERSION}.zip
+  BITSUM_CLI_MACOS: Bitsum-CLI-MacOS-v${VERSION}.tar.gz
   DOWNSTREAM_AGAMA_BRANCH: ${CI_COMMIT_REF_NAME}
   POST_MESSAGE: "Source: ${CI_PROJECT_NAME}/${CI_COMMIT_REF_NAME}\n
   Pipeline Trigger: ${CI_PIPELINE_SOURCE}\n
@@ -20,13 +20,13 @@ variables:
 ########################################################################################################################
 ########################################################################################################################
 ########################################################################################################################
-####START####          Build Stage: compile and package komodo binaries for Verus CLI                     ####START#####
+####START####          Build Stage: compile and package komodo binaries for Bitsum CLI                     ####START#####
 ########################################################################################################################
 ########################################################################################################################
 ####START####                                            LINUX                                             ####START####
 ########################################################################################################################
 build:linux:
-  image: asherd/verus-builders:verus-ubuntu
+  image: asherd/bitsum-builders:bitsum-ubuntu
   variables:
     DOCKER_DRIVER: overlay2
   stage: build
@@ -36,31 +36,31 @@ build:linux:
     - depends/built
   script:
   - zcutil/build.sh -j$(nproc)
-  - mkdir verus-cli
+  - mkdir bitsum-cli
   - cp src/komodod
       src/komodo-cli
-      src/verus
-      src/verusd
-      doc/man/verus-cli/linux/README.txt
+      src/bitsum
+      src/bitsumd
+      doc/man/bitsum-cli/linux/README.txt
       zcutil/fetch-params.sh
-      verus-cli
-  - mv verus-cli/fetch-params.sh verus-cli/fetch-params
-  - chmod +x verus-cli/komodod
-  - chmod +x verus-cli/komodo-cli
-  - chmod +x verus-cli/verus
-  - chmod +x verus-cli/verusd
-  - chmod +x verus-cli/fetch-params
-  - tar -czvf ${VERUS_CLI_LINUX} verus-cli
-  - md5sum ${VERUS_CLI_LINUX} > ${VERUS_CLI_LINUX}.md5
-  - curl -F file=@"${VERUS_CLI_LINUX}"
+      bitsum-cli
+  - mv bitsum-cli/fetch-params.sh bitsum-cli/fetch-params
+  - chmod +x bitsum-cli/komodod
+  - chmod +x bitsum-cli/komodo-cli
+  - chmod +x bitsum-cli/bitsum
+  - chmod +x bitsum-cli/bitsumd
+  - chmod +x bitsum-cli/fetch-params
+  - tar -czvf ${BITSUM_CLI_LINUX} bitsum-cli
+  - md5sum ${BITSUM_CLI_LINUX} > ${BITSUM_CLI_LINUX}.md5
+  - curl -F file=@"${BITSUM_CLI_LINUX}"
       -F channels="${CLI_POST_CHANNEL}"
       -F initial_comment="${POST_MESSAGE}"
       -H "${SLACK_BOT_AUTH}"
       "https://slack.com/api/files.upload"
   artifacts:
     paths:
-    - ${VERUS_CLI_LINUX}
-    - ${VERUS_CLI_LINUX}.md5
+    - ${BITSUM_CLI_LINUX}
+    - ${BITSUM_CLI_LINUX}.md5
     expire_in: 1 week
 ########################################################################################################################
 ####END####                                              LINUX                                               ####END####
@@ -68,7 +68,7 @@ build:linux:
 ####START####                                           WINDOWS                                            ####START####
 ########################################################################################################################
 build:windows:
-  image: asherd/verus-builders:verus-windows
+  image: asherd/bitsum-builders:bitsum-windows
   variables:
     DOCKER_DRIVER: overlay2
   stage: build
@@ -78,25 +78,25 @@ build:windows:
     - depends/built
   script:
   - zcutil/build-win.sh -j$(nproc)
-  - mkdir verus-cli
+  - mkdir bitsum-cli
   - cp src/komodod.exe
       src/komodo-cli.exe
       src/komodo-tx.exe
-      doc/man/verus-cli/windows/README.txt
+      doc/man/bitsum-cli/windows/README.txt
       zcutil/fetch-params.bat
       zcutil/wget64.exe
-      verus-cli
-  - zip -r ${VERUS_CLI_WINDOWS} verus-cli
-  - md5sum ${VERUS_CLI_WINDOWS} > ${VERUS_CLI_WINDOWS}.md5
-  - curl -F file=@"${VERUS_CLI_WINDOWS}"
+      bitsum-cli
+  - zip -r ${BITSUM_CLI_WINDOWS} bitsum-cli
+  - md5sum ${BITSUM_CLI_WINDOWS} > ${BITSUM_CLI_WINDOWS}.md5
+  - curl -F file=@"${BITSUM_CLI_WINDOWS}"
       -F channels="${CLI_POST_CHANNEL}"
       -F initial_comment="${POST_MESSAGE}"
       -H "${SLACK_BOT_AUTH}"
       "https://slack.com/api/files.upload"
   artifacts:
     paths:
-    - ${VERUS_CLI_WINDOWS}
-    - ${VERUS_CLI_WINDOWS}.md5
+    - ${BITSUM_CLI_WINDOWS}
+    - ${BITSUM_CLI_WINDOWS}.md5
     expire_in: 1 week
 ########################################################################################################################
 ####END####                                             WINDOWS                                              ####END####
@@ -113,17 +113,17 @@ build:mac:
   script:
   - zcutil/build-mac.sh -j$(sysctl -n hw.physicalcpu)
   - ./makeReleaseMac.sh
-  - tar -czvf ${VERUS_CLI_MACOS} verus-cli
-  - md5sum ${VERUS_CLI_MACOS} > ${VERUS_CLI_MACOS}.md5
-  - curl -F file=@"${VERUS_CLI_MACOS}"
+  - tar -czvf ${BITSUM_CLI_MACOS} bitsum-cli
+  - md5sum ${BITSUM_CLI_MACOS} > ${BITSUM_CLI_MACOS}.md5
+  - curl -F file=@"${BITSUM_CLI_MACOS}"
       -F channels="${CLI_POST_CHANNEL}"
       -F initial_comment="${POST_MESSAGE}"
       -H "${SLACK_BOT_AUTH}"
       "https://slack.com/api/files.upload"
   artifacts:
     paths:
-    - ${VERUS_CLI_MACOS}
-    - ${VERUS_CLI_MACOS}.md5
+    - ${BITSUM_CLI_MACOS}
+    - ${BITSUM_CLI_MACOS}.md5
     expire_in: 1 week
 ########################################################################################################################
 ####END####                                              MACOS                                               ####END####
@@ -182,7 +182,7 @@ build:mac:
 ####END####                                Static Application Security Tests                                 ####END####
 ########################################################################################################################
 ########################################################################################################################
-####START####                            Run Verus CLI on Ubuntu Xenial (16.04)                            ####START####
+####START####                            Run Bitsum CLI on Ubuntu Xenial (16.04)                            ####START####
 ########################################################################################################################
 .ubuntu:xenial:
   image: ubuntu:xenial
@@ -194,9 +194,9 @@ build:mac:
   - rm -rf /root/.komodo || true
   - mv .komodo /root/ || true
   script:
-  - tar -xzvf ${VERUS_CLI_LINUX}
-  - export PATH=$PATH:$CI_PROJECT_DIR/verus-cli
-  - python qa/verus-cli-tests/verus-cli-tester.py
+  - tar -xzvf ${BITSUM_CLI_LINUX}
+  - export PATH=$PATH:$CI_PROJECT_DIR/bitsum-cli
+  - python qa/bitsum-cli-tests/bitsum-cli-tester.py
   after_script:
   - mv /root/.komodo ./ || true
   cache:
@@ -208,10 +208,10 @@ build:mac:
   dependencies:
   - build:linux
 ########################################################################################################################
-####END####                               Run Verus CLI on Ubuntu Xenial (16.04)                             ####END####
+####END####                               Run Bitsum CLI on Ubuntu Xenial (16.04)                             ####END####
 ########################################################################################################################
 ########################################################################################################################
-####START####                             Run Verus CLI on Ubuntu Bionic (18.04)                           ####START####
+####START####                             Run Bitsum CLI on Ubuntu Bionic (18.04)                           ####START####
 ########################################################################################################################
 .ubuntu:bionic:
   image: ubuntu:bionic
@@ -223,9 +223,9 @@ build:mac:
   - rm -rf /root/.komodo || true
   - mv .komodo /root/ || true
   script:
-  - tar -xzvf ${VERUS_CLI_LINUX}
-  - export PATH=$PATH:$CI_PROJECT_DIR/verus-cli
-  - python qa/verus-cli-tests/verus-cli-tester.py
+  - tar -xzvf ${BITSUM_CLI_LINUX}
+  - export PATH=$PATH:$CI_PROJECT_DIR/bitsum-cli
+  - python qa/bitsum-cli-tests/bitsum-cli-tester.py
   after_script:
   - mv /root/.komodo ./ || true
   cache:
@@ -237,61 +237,61 @@ build:mac:
   dependencies:
   - build:linux
 ########################################################################################################################
-####END####                               Run Verus CLI on Ubuntu Bionic (18.04)                             ####END####
+####END####                               Run Bitsum CLI on Ubuntu Bionic (18.04)                             ####END####
 ########################################################################################################################
 ########################################################################################################################
-####START####                             Run Verus CLI on MacOS Sierra (10.12.6)                          ####START####
+####START####                             Run Bitsum CLI on MacOS Sierra (10.12.6)                          ####START####
 ########################################################################################################################
 .macos:sierra:
   stage: test
   tags: ["Sierra"]
   script:
-  - tar -xzvf $VERUS_CLI_MACOS
-  - export PATH=$PATH:$CI_PROJECT_DIR/verus-cli
-  - python qa/verus-cli-tests/verus-cli-tester.py
+  - tar -xzvf $BITSUM_CLI_MACOS
+  - export PATH=$PATH:$CI_PROJECT_DIR/bitsum-cli
+  - python qa/bitsum-cli-tests/bitsum-cli-tester.py
   artifacts:
     paths: [log.txt]
     expire_in: 1 week
   dependencies:
   - build:mac
 ########################################################################################################################
-####END####                               Run Verus CLI on MacOS Sierra (10.12.6)                            ####END####
+####END####                               Run Bitsum CLI on MacOS Sierra (10.12.6)                            ####END####
 ########################################################################################################################
 ########################################################################################################################
-####START####                          Run Verus CLI on MacOS High Sierra (10.12.6)                        ####START####
+####START####                          Run Bitsum CLI on MacOS High Sierra (10.12.6)                        ####START####
 ########################################################################################################################
 .macos:high-sierra:
   stage: test
   tags: ["High Sierra"]
   script:
-  - tar -xzvf ${VERUS_CLI_MACOS}
-  - export PATH=$PATH:$CI_PROJECT_DIR/verus-cli
-  - python qa/verus-cli-tests/verus-cli-tester.py
+  - tar -xzvf ${BITSUM_CLI_MACOS}
+  - export PATH=$PATH:$CI_PROJECT_DIR/bitsum-cli
+  - python qa/bitsum-cli-tests/bitsum-cli-tester.py
   artifacts:
     paths: [log.txt]
     expire_in: 1 week
   dependencies:
   - build:mac
 ########################################################################################################################
-####START####                          Run Verus CLI on MacOS High Sierra (10.12.6)                        ####START####
+####START####                          Run Bitsum CLI on MacOS High Sierra (10.12.6)                        ####START####
 ########################################################################################################################
 ########################################################################################################################
-####START####                              Run Verus CLI on Windows 10                                     ####START####
+####START####                              Run Bitsum CLI on Windows 10                                     ####START####
 ########################################################################################################################
 .windows:10:
   stage: test
   tags: ["Windows 10"]
   script:
-  - PowerShell Expand-Archive -Path %VERUS_CLI_WINDOWS% -DestinationPath %CI_PROJECT_DIR%
-  - set PATH=%PATH%;%CI_PROJECT_DIR%\verus-cli
-  - qa\verus-cli-tests\verus-cli-tester.py
+  - PowerShell Expand-Archive -Path %BITSUM_CLI_WINDOWS% -DestinationPath %CI_PROJECT_DIR%
+  - set PATH=%PATH%;%CI_PROJECT_DIR%\bitsum-cli
+  - qa\bitsum-cli-tests\bitsum-cli-tester.py
   artifacts:
     paths: [log.txt]
     expire_in: 1 week
   dependencies:
   - build:windows
 ########################################################################################################################
-####END####                                Run Verus CLI on Windows 10                                       ####END####
+####END####                                Run Bitsum CLI on Windows 10                                       ####END####
 ########################################################################################################################
 ########################################################################################################################
 ####END####                                           Test Stage                                             ####END####
@@ -310,9 +310,9 @@ deploy:
   - build:mac
   script:
   - mkdir Windows && mkdir Linux && mkdir MacOS &&
-    mv ${VERUS_CLI_WINDOWS} Windows &&
-    mv ${VERUS_CLI_LINUX} Linux &&
-    mv ${VERUS_CLI_MACOS} MacOS
+    mv ${BITSUM_CLI_WINDOWS} Windows &&
+    mv ${BITSUM_CLI_LINUX} Linux &&
+    mv ${BITSUM_CLI_MACOS} MacOS
   - echo "$AUTH_KEY" > AUTH_KEY.json &&
     gcloud auth activate-service-account
     --key-file AUTH_KEY.json
@@ -321,9 +321,9 @@ deploy:
       -F token="$CI_JOB_TOKEN"
       -F ref="$DOWNSTREAM_AGAMA_BRANCH"
       -F variables\[UPSTREAM_TRIGGER_INFO\]="${POST_MESSAGE}"
-      -F variables\[VERUS_CLI_LINUX\]="${VERUS_CLI_LINUX}"
-      -F variables\[VERUS_CLI_WINDOWS\]="${VERUS_CLI_WINDOWS}"
-      -F variables\[VERUS_CLI_MACOS\]="${VERUS_CLI_MACOS}"
+      -F variables\[BITSUM_CLI_LINUX\]="${BITSUM_CLI_LINUX}"
+      -F variables\[BITSUM_CLI_WINDOWS\]="${BITSUM_CLI_WINDOWS}"
+      -F variables\[BITSUM_CLI_MACOS\]="${BITSUM_CLI_MACOS}"
       "https://gitlab.com/api/v4/projects/8018592/trigger/pipeline"
 ########################################################################################################################
 ####END####                                           Deploy                                                 ####END####

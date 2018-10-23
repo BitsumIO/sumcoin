@@ -56,7 +56,7 @@ uint32_t komodo_segid32(char *coinaddr);
 int64_t komodo_coinsupply(int64_t *zfundsp,int32_t height);
 int32_t notarizedtxid_height(char *dest,char *txidstr,int32_t *kmdnotarized_heightp);
 #define KOMODO_VERSION "0.2.1"
-#define VERUS_VERSION "0.4.0b"
+#define BITSUM_VERSION "0.4.0b"
 extern uint16_t ASSETCHAINS_P2PPORT,ASSETCHAINS_RPCPORT;
 extern uint32_t ASSETCHAINS_CC;
 extern uint32_t ASSETCHAINS_MAGIC;
@@ -109,7 +109,7 @@ UniValue getinfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("version", CLIENT_VERSION));
     obj.push_back(Pair("protocolversion", PROTOCOL_VERSION));
     obj.push_back(Pair("KMDversion", KOMODO_VERSION));
-    obj.push_back(Pair("VRSCversion", VERUS_VERSION));
+    obj.push_back(Pair("SUMversion", BITSUM_VERSION));
     obj.push_back(Pair("notarized", notarized_height));
     obj.push_back(Pair("prevMoMheight", prevMoMheight));
     obj.push_back(Pair("notarizedhash", notarized_hash.ToString()));
@@ -204,11 +204,11 @@ UniValue getinfo(const UniValue& params, bool fHelp)
         }
 
         if ( ASSETCHAINS_COMMISSION != 0 )
-            obj.push_back(Pair("commission",        ASSETCHAINS_COMMISSION));
+            obj.push_back(Pair("commission", ASSETCHAINS_COMMISSION));
         if ( ASSETCHAINS_STAKED != 0 )
-            obj.push_back(Pair("staked",        ASSETCHAINS_STAKED));
+            obj.push_back(Pair("staked", ASSETCHAINS_STAKED));
         if ( ASSETCHAINS_LWMAPOS != 0 )
-            obj.push_back(Pair("veruspos", ASSETCHAINS_LWMAPOS));
+            obj.push_back(Pair("sumpos", ASSETCHAINS_LWMAPOS));
     }
     return obj;
 }

@@ -1,10 +1,10 @@
-
 // Copyright (c) 2018 The Verus developers
+// Copyright (c) 2018 The BitSUM developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef VERUS_LAUNCH_H
-#define VERUS_LAUNCH_H
+#ifndef BITSUM_LAUNCH_H
+#define BITSUM_LAUNCH_H
 
 #include <string>
 

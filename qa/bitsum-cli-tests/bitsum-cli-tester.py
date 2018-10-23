@@ -2,8 +2,8 @@ from subprocess import Popen, check_output, call
 from time import sleep
 from os import environ, path
 
-daemon_wrapper = "verusd"
-cli_wrapper = "verus"
+daemon_wrapper = "bitsumd"
+cli_wrapper = "bitsum"
 daemon_runtime_seconds = 600
 cli_commands = ["getblockchaininfo", "getmininginfo", "getwalletinfo", "stop"]
 

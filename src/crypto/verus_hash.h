@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 /*
-This provides the PoW hash function for Verus, enabling CPU mining.
+This provides the PoW hash function for Bitsum, enabling CPU mining.
 */
 #ifndef VERUS_HASH_H_
 #define VERUS_HASH_H_
@@ -13,7 +13,7 @@ This provides the PoW hash function for Verus, enabling CPU mining.
 
 #include <cpuid.h>
 
-extern "C" 
+extern "C"
 {
 #include "crypto/haraka.h"
 #include "crypto/haraka_portable.h"

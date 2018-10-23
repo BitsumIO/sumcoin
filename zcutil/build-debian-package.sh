@@ -5,8 +5,8 @@
 set -e
 set -x
 
-BUILD_PATH="/tmp/verus-cli"
-PACKAGE_NAME="verus-cli"
+BUILD_PATH="/tmp/bitsum-cli"
+PACKAGE_NAME="bitsum-cli"
 SRC_PATH=`pwd`
 SRC_DEB=$SRC_PATH/contrib/debian
 SRC_DOC=$SRC_PATH/doc
@@ -46,10 +46,10 @@ chmod 0755 -R $BUILD_DIR/*
 # Copy binaries
 cp $SRC_PATH/src/komodod $DEB_BIN
 strip $DEB_BIN/komodod
-cp $SRC_PATH/src/verusd $DEB_BIN
+cp $SRC_PATH/src/bitsumd $DEB_BIN
 cp $SRC_PATH/src/komodo-cli $DEB_BIN
 strip $DEB_BIN/komodo-cli
-cp $SRC_PATH/src/verus $DEB_BIN
+cp $SRC_PATH/src/bitsum $DEB_BIN
 cp $SRC_PATH/zcutil/fetch-params.sh $DEB_BIN/zcash-fetch-params
 # Copy docs
 cp $SRC_PATH/doc/release-notes/release-notes-1.0.0.md $DEB_DOC/changelog

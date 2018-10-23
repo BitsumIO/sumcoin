@@ -64,9 +64,9 @@ struct CC_utxo
     int32_t vout;
 };
 
-// these are the parameters stored after Verus crypto-condition vouts. new versions may change
+// these are the parameters stored after Bitsum crypto-condition vouts. new versions may change
 // the format
-struct CC_meta 
+struct CC_meta
 {
     std::vector<unsigned char> version;
     uint8_t evalCode;

@@ -1311,8 +1311,8 @@ public:
                           bool ignoreUnspendable=true);
     
     // staking functions
-    bool VerusSelectStakeOutput(CBlock *pBlock, arith_uint256 &hashResult, CTransaction &stakeSource, int32_t &voutNum, int32_t nHeight, uint32_t &bnTarget) const;
-    int32_t VerusStakeTransaction(CBlock *pBlock, CMutableTransaction &txNew, uint32_t &bnTarget, arith_uint256 &hashResult, uint8_t *utxosig, CPubKey pk) const;
+    bool BitsumSelectStakeOutput(CBlock *pBlock, arith_uint256 &hashResult, CTransaction &stakeSource, int32_t &voutNum, int32_t nHeight, uint32_t &bnTarget) const;
+    int32_t BitsumStakeTransaction(CBlock *pBlock, CMutableTransaction &txNew, uint32_t &bnTarget, arith_uint256 &hashResult, uint8_t *utxosig, CPubKey pk) const;
 
     /* Find unspent notes filtered by payment address, min depth and max depth */
     void GetUnspentFilteredNotes(std::vector<CUnspentSproutNotePlaintextEntry>& sproutEntries,
@@ -1475,7 +1475,7 @@ private:
     boost::optional<std::string> hdKeypath; // currently sapling only
     boost::optional<std::string> seedFpStr; // currently sapling only
     bool log;
-public: 
+public:
     AddSpendingKeyToWallet(CWallet *wallet, const Consensus::Params &params) :
         m_wallet(wallet), params(params), nTime(1), hdKeypath(boost::none), seedFpStr(boost::none), log(false) {}
     AddSpendingKeyToWallet(
@@ -1490,7 +1490,7 @@ public:
 
     SpendingKeyAddResult operator()(const libzcash::SproutSpendingKey &sk) const;
     SpendingKeyAddResult operator()(const libzcash::SaplingExtendedSpendingKey &sk) const;
-    SpendingKeyAddResult operator()(const libzcash::InvalidEncoding& no) const;    
+    SpendingKeyAddResult operator()(const libzcash::InvalidEncoding& no) const;
 };
 
 

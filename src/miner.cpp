@@ -119,10 +119,10 @@ void UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, 
 extern CCriticalSection cs_metrics;
 extern int32_t KOMODO_MININGTHREADS,KOMODO_LONGESTCHAIN,ASSETCHAINS_SEED,IS_KOMODO_NOTARY,USE_EXTERNAL_PUBKEY,KOMODO_CHOSEN_ONE,ASSETCHAIN_INIT,KOMODO_INITDONE,KOMODO_ON_DEMAND,KOMODO_INITDONE,KOMODO_PASSPORT_INITDONE;
 extern uint64_t ASSETCHAINS_COMMISSION, ASSETCHAINS_STAKED;
-extern bool VERUS_MINTBLOCKS;
+extern bool BITSUM_MINTBLOCKS;
 extern uint64_t ASSETCHAINS_REWARD[ASSETCHAINS_MAX_ERAS], ASSETCHAINS_TIMELOCKGTE, ASSETCHAINS_NONCEMASK[];
 extern const char *ASSETCHAINS_ALGORITHMS[];
-extern int32_t VERUS_MIN_STAKEAGE, ASSETCHAINS_ALGO, ASSETCHAINS_EQUIHASH, ASSETCHAINS_VERUSHASH, ASSETCHAINS_LASTERA, ASSETCHAINS_LWMAPOS, ASSETCHAINS_NONCESHIFT[], ASSETCHAINS_HASHESPERROUND[];
+extern int32_t BITSUM_MIN_STAKEAGE, ASSETCHAINS_ALGO, ASSETCHAINS_EQUIHASH, ASSETCHAINS_VERUSHASH, ASSETCHAINS_LASTERA, ASSETCHAINS_LWMAPOS, ASSETCHAINS_NONCESHIFT[], ASSETCHAINS_HASHESPERROUND[];
 extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 extern std::string NOTARY_PUBKEY,ASSETCHAINS_OVERRIDE_PUBKEY;
 void vcalc_sha256(char deprecated[(256 >> 3) * 2 + 1],uint8_t hash[256 >> 3],uint8_t *src,int32_t len);
@@ -137,7 +137,7 @@ int32_t komodo_validate_interest(const CTransaction &tx,int32_t txheight,uint32_
 int64_t komodo_block_unlocktime(uint32_t nHeight);
 uint64_t komodo_commission(const CBlock *block);
 int32_t komodo_staked(CMutableTransaction &txNew,uint32_t nBits,uint32_t *blocktimep,uint32_t *txtimep,uint256 *utxotxidp,int32_t *utxovoutp,uint64_t *utxovaluep,uint8_t *utxosig);
-int32_t verus_staked(CBlock *pBlock, CMutableTransaction &txNew, uint32_t &nBits, arith_uint256 &hashResult, uint8_t *utxosig, CPubKey &pk);
+int32_t bitsum_staked(CBlock *pBlock, CMutableTransaction &txNew, uint32_t &nBits, arith_uint256 &hashResult, uint8_t *utxosig, CPubKey &pk);
 int32_t komodo_notaryvin(CMutableTransaction &txNew,uint8_t *notarypub33);
 
 CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount, bool isStake)
@@ -242,9 +242,9 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
         CTransaction cb;
         int cheatHeight = nHeight - COINBASE_MATURITY < 1 ? 1 : nHeight - COINBASE_MATURITY;
         if (cheatCatcher &&
-            sapling && chainActive.Height() > 100 && 
-            (ppast = chainActive[cheatHeight]) && 
-            ppast->IsVerusPOSBlock() && 
+            sapling && chainActive.Height() > 100 &&
+            (ppast = chainActive[cheatHeight]) &&
+            ppast->IsBitsumPOSBlock() &&
             cheatList.IsHeightOrGreaterInList(cheatHeight))
         {
             // get the block and see if there is a cheat candidate for the stake tx
@@ -288,7 +288,7 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
 
                         if (hasInput)
                         {
-                            // this is a send from a t-address to a sapling address, which we don't have an ovk for. 
+                            // this is a send from a t-address to a sapling address, which we don't have an ovk for.
                             // Instead, generate a common one from the HD seed. This ensures the data is
                             // recoverable, at least for us, while keeping it logically separate from the ZIP 32
                             // Sapling key hierarchy, which the user might not be using.
@@ -558,7 +558,7 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
                 uint32_t nBitsPOS;
                 arith_uint256 posHash;
 
-                siglen = verus_staked(pblock, txStaked, nBitsPOS, posHash, utxosig, pk);
+                siglen = bitsum_staked(pblock, txStaked, nBitsPOS, posHash, utxosig, pk);
                 blocktime = GetAdjustedTime();
 
                 // change the scriptPubKeyIn to the same output script exactly as the staking transaction
@@ -665,7 +665,7 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
         pblock->vtx[0] = txNew;
         pblocktemplate->vTxFees[0] = -nFees;
 
-        // if not Verus stake, setup nonce, otherwise, leave it alone
+        // if not Bitsum stake, setup nonce, otherwise, leave it alone
         if (!isStake || ASSETCHAINS_LWMAPOS == 0)
         {
             // Randomise nonce
@@ -681,7 +681,7 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
         pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
         pblock->hashFinalSaplingRoot   = sapling_tree.root();
 
-        // all Verus PoS chains need this data in the block at all times
+        // all Bitsum PoS chains need this data in the block at all times
         if ( ASSETCHAINS_LWMAPOS || ASSETCHAINS_SYMBOL[0] == 0 || ASSETCHAINS_STAKED == 0 || KOMODO_MININGTHREADS > 0 )
         {
             UpdateTime(pblock, Params().GetConsensus(), pindexPrev);
@@ -990,10 +990,10 @@ CBlockIndex *get_chainactive(int32_t height)
 /*
  * A separate thread to stake, while the miner threads mine.
  */
-void static VerusStaker(CWallet *pwallet)
+void static BitsumStaker(CWallet *pwallet)
 {
-    LogPrintf("Verus staker thread started\n");
-    RenameThread("verus-staker");
+    LogPrintf("Bitsum staker thread started\n");
+    RenameThread("bitsum-staker");
 
     const CChainParams& chainparams = Params();
     auto consensusParams = chainparams.GetConsensus();
@@ -1043,7 +1043,7 @@ void static VerusStaker(CWallet *pwallet)
 
             // try to stake a block
             CBlockTemplate *ptr = NULL;
-            if (Mining_height > VERUS_MIN_STAKEAGE)
+            if (Mining_height > BITSUM_MIN_STAKEAGE)
                 ptr = CreateNewBlockWithKey(reservekey, Mining_height, 0, true);
 
             if ( ptr == 0 )
@@ -1119,10 +1119,10 @@ void static VerusStaker(CWallet *pwallet)
             printf("Found block %d \n", Mining_height );
             printf("staking reward %.8f %s!\n", (double)subsidy / (double)COIN, ASSETCHAINS_SYMBOL);
             arith_uint256 post;
-            post.SetCompact(pblock->GetVerusPOSTarget());
+            post.SetCompact(pblock->GetBitsumPOSTarget());
             pindexPrev = get_chainactive(Mining_height - 100);
             CTransaction &sTx = pblock->vtx[pblock->vtx.size()-1];
-            printf("POS hash: %s  \ntarget:   %s\n", 
+            printf("POS hash: %s  \ntarget:   %s\n",
                 CTransaction::_GetVerusPOSHash(&(pblock->nNonce), sTx.vin[0].prevout.hash, sTx.vin[0].prevout.n, Mining_height, pindexPrev->GetBlockHeader().GetVerusEntropyHash(Mining_height - 100), sTx.vout[0].nValue).GetHex().c_str(), ArithToUint256(post).GetHex().c_str());
             if (unlockTime > Mining_height && subsidy >= ASSETCHAINS_TIMELOCKGTE)
                 printf("- timelocked until block %i\n", unlockTime);
@@ -1142,12 +1142,12 @@ void static VerusStaker(CWallet *pwallet)
     }
     catch (const boost::thread_interrupted&)
     {
-        LogPrintf("VerusStaker terminated\n");
+        LogPrintf("VBitsumStaker terminated\n");
         throw;
     }
     catch (const std::runtime_error &e)
     {
-        LogPrintf("VerusStaker runtime error: %s\n", e.what());
+        LogPrintf("BitsumStaker runtime error: %s\n", e.what());
         return;
     }
 }
@@ -1905,17 +1905,17 @@ void static BitcoinMiner()
         // if we are supposed to catch stake cheaters, there must be a valid sapling parameter, we need it at
         // initialization, and this is the first time we can get it. store the Sapling address here
         extern boost::optional<libzcash::SaplingPaymentAddress> cheatCatcher;
-        extern std::string VERUS_CHEATCATCHER;
-        libzcash::PaymentAddress addr = DecodePaymentAddress(VERUS_CHEATCATCHER);
-        if (VERUS_CHEATCATCHER.size() > 0 && IsValidPaymentAddress(addr))
+        extern std::string BITSUM_CHEATCATCHER;
+        libzcash::PaymentAddress addr = DecodePaymentAddress(BITSUM_CHEATCATCHER);
+        if (BITSUM_CHEATCATCHER.size() > 0 && IsValidPaymentAddress(addr))
         {
             cheatCatcher = boost::get<libzcash::SaplingPaymentAddress>(addr);
         }
         else
         {
-            if (VERUS_CHEATCATCHER.size() > 0)
+            if (BITSUM_CHEATCATCHER.size() > 0)
                 fprintf(stderr, "-cheatcatcher parameter is invalid Sapling payment address\n");
-        }    
+        }
 
         static boost::thread_group* minerThreads = NULL;
         
@@ -1933,15 +1933,15 @@ void static BitcoinMiner()
         if ( nThreads == 0 && ASSETCHAINS_STAKED )
             nThreads = 1;
 
-        if ((nThreads == 0 || !fGenerate) && (VERUS_MINTBLOCKS == 0 || pwallet == NULL))
+        if ((nThreads == 0 || !fGenerate) && (BITSUM_MINTBLOCKS == 0 || pwallet == NULL))
             return;
 
         minerThreads = new boost::thread_group();
 
 #ifdef ENABLE_WALLET
-        if (ASSETCHAINS_LWMAPOS != 0 && VERUS_MINTBLOCKS)
+        if (ASSETCHAINS_LWMAPOS != 0 && BITSUM_MINTBLOCKS)
         {
-            minerThreads->create_thread(boost::bind(&VerusStaker, pwallet));
+            minerThreads->create_thread(boost::bind(&BitsumStaker, pwallet));
         }
 #endif
 

@@ -441,14 +441,14 @@ public:
     CBlockIndex* GetAncestor(int height);
     const CBlockIndex* GetAncestor(int height) const;
 
-    int32_t GetVerusPOSTarget() const
+    int32_t GetBitsumPOSTarget() const
     {
-        return GetBlockHeader().GetVerusPOSTarget();
+        return GetBlockHeader().GetBitsumPOSTarget();
     }
 
-    bool IsVerusPOSBlock() const
+    bool IsBitsumPOSBlock() const
     {
-        return GetBlockHeader().IsVerusPOSBlock();
+        return GetBlockHeader().IsBitsumPOSBlock();
     }
 };
 

@@ -958,13 +958,13 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& in
 bool ContextualCheckCoinbaseTransaction(const CTransaction& tx, const int nHeight)
 {
     // if time locks are on, ensure that this coin base is time locked exactly as it should be
-    if (((uint64_t)(tx.GetValueOut()) >= ASSETCHAINS_TIMELOCKGTE) || 
-        (((nHeight >= 31680) || strcmp(ASSETCHAINS_SYMBOL, "VRSC") != 0) && komodo_ac_block_subsidy(nHeight) >= ASSETCHAINS_TIMELOCKGTE))
+    if (((uint64_t)(tx.GetValueOut()) >= ASSETCHAINS_TIMELOCKGTE) ||
+        (((nHeight >= 31680) || strcmp(ASSETCHAINS_SYMBOL, "SUM") != 0) && komodo_ac_block_subsidy(nHeight) >= ASSETCHAINS_TIMELOCKGTE))
     {
         CScriptID scriptHash;
 
-        // to be valid, it must be a P2SH transaction and have an op_return in vout[1] that 
-        // holds the full output script, which may include multisig, etc., but starts with 
+        // to be valid, it must be a P2SH transaction and have an op_return in vout[1] that
+        // holds the full output script, which may include multisig, etc., but starts with
         // the time lock verify of the correct time lock for this block height
         if (tx.vout.size() == 2 &&
             CScriptExt(tx.vout[0].scriptPubKey).IsPayToScriptHash(&scriptHash) &&
@@ -1764,7 +1764,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
             dFreeCount += nSize;
         }
 
-        if (fRejectAbsurdFee && nFees > ::minRelayTxFee.GetFee(nSize) * 10000 && nFees > nValueOut/19) 
+        if (fRejectAbsurdFee && nFees > ::minRelayTxFee.GetFee(nSize) * 10000 && nFees > nValueOut/19)
         {
             string errmsg = strprintf("absurdly high fees %s, %d > %d",
                                       hash.ToString(),
@@ -2209,9 +2209,9 @@ int IsNotInSync()
 
     CBlockIndex *pbi = chainActive.Tip();
     int longestchain = komodo_longestchain();
-    if ( !pbi || 
-         (pindexBestHeader == 0) || 
-         ((pindexBestHeader->GetHeight() - 1) > pbi->GetHeight()) || 
+    if ( !pbi ||
+         (pindexBestHeader == 0) ||
+         ((pindexBestHeader->GetHeight() - 1) > pbi->GetHeight()) ||
          (longestchain != 0 && longestchain > pbi->GetHeight()) )
     {
         return (pbi && pindexBestHeader && (pindexBestHeader->GetHeight() - 1) > pbi->GetHeight()) ?
@@ -2463,7 +2463,7 @@ namespace Consensus {
                 if (fCoinbaseEnforcedProtectionEnabled &&
                     consensusParams.fCoinbaseMustBeProtected &&
                     !(tx.vout.size() == 0 || (tx.vout.size() == 1 && tx.vout[0].nValue == 0)) &&
-                    (strcmp(ASSETCHAINS_SYMBOL, "VRSC") != 0 || (nSpendHeight >= 12800 && coins->nHeight >= 12800))) {
+                    (strcmp(ASSETCHAINS_SYMBOL, "SUM") != 0 || (nSpendHeight >= 12800 && coins->nHeight >= 12800))) {
                     return state.DoS(100,
                                      error("CheckInputs(): tried to spend coinbase with transparent outputs"),
                                      REJECT_INVALID, "bad-txns-coinbase-spend-has-transparent-outputs");
@@ -3718,16 +3718,16 @@ bool static DisconnectTip(CValidationState &state, bool fBare = false) {
             CValidationState stateDummy;
             
             // don't keep staking or invalid transactions
-            if (tx.IsCoinBase() || ((i == (block.vtx.size() - 1)) && ((ASSETCHAINS_LWMAPOS && block.IsVerusPOSBlock()) || (ASSETCHAINS_STAKED && komodo_isPoS((CBlock *)&block) != 0))) || !AcceptToMemoryPool(mempool, stateDummy, tx, false, NULL))
+            if (tx.IsCoinBase() || ((i == (block.vtx.size() - 1)) && ((ASSETCHAINS_LWMAPOS && block.IsBitsumPOSBlock()) || (ASSETCHAINS_STAKED && komodo_isPoS((CBlock *)&block) != 0))) || !AcceptToMemoryPool(mempool, stateDummy, tx, false, NULL))
             {
                 mempool.remove(tx, removed, true);
             }
 
-            // if this is a staking tx, and we are on Verus Sapling with nothing at stake solution,
+            // if this is a staking tx, and we are on Bitsum Sapling with nothing at stake solution,
             // save staking tx as a possible cheat
-            if (NetworkUpgradeActive(pindexDelete->GetHeight(), Params().GetConsensus(), Consensus::UPGRADE_SAPLING) && 
-                ASSETCHAINS_LWMAPOS && (i == (block.vtx.size() - 1)) && 
-                (block.IsVerusPOSBlock()))
+            if (NetworkUpgradeActive(pindexDelete->GetHeight(), Params().GetConsensus(), Consensus::UPGRADE_SAPLING) &&
+                ASSETCHAINS_LWMAPOS && (i == (block.vtx.size() - 1)) &&
+                (block.IsBitsumPOSBlock()))
             {
                 CTxHolder txh = CTxHolder(block.vtx[i], pindexDelete->GetHeight());
                 cheatList.Add(txh);
@@ -3758,7 +3758,7 @@ bool static DisconnectTip(CValidationState &state, bool fBare = false) {
     for (int i = 0; i < block.vtx.size(); i++)
     {
         CTransaction &tx = block.vtx[i];
-        if ((i == (block.vtx.size() - 1)) && ((ASSETCHAINS_LWMAPOS && block.IsVerusPOSBlock()) || (ASSETCHAINS_STAKED != 0 && (komodo_isPoS((CBlock *)&block) != 0))))
+        if ((i == (block.vtx.size() - 1)) && ((ASSETCHAINS_LWMAPOS && block.IsBitsumPOSBlock()) || (ASSETCHAINS_STAKED != 0 && (komodo_isPoS((CBlock *)&block) != 0))))
         {
             EraseFromWallets(tx.GetHash());
         }
@@ -4548,7 +4548,7 @@ bool CheckBlock(int32_t *futureblockp,int32_t height,CBlockIndex *pindex,const C
             for (i=0; i<block.vtx.size(); i++)
             {
                 CTransaction Tx; const CTransaction &tx = (CTransaction)block.vtx[i];
-                if (tx.IsCoinBase() || ((i == (block.vtx.size() - 1)) && ((ASSETCHAINS_LWMAPOS && block.IsVerusPOSBlock()) || (ASSETCHAINS_STAKED && komodo_isPoS((CBlock *)&block) != 0))))
+                if (tx.IsCoinBase() || ((i == (block.vtx.size() - 1)) && ((ASSETCHAINS_LWMAPOS && block.IsBitsumPOSBlock()) || (ASSETCHAINS_STAKED && komodo_isPoS((CBlock *)&block) != 0))))
                     continue;
                 Tx = tx;
                 if ( myAddtomempool(Tx) == false ) // happens with out of order tx in block on resync
@@ -4609,7 +4609,7 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
     // Check proof of work
     if ( (ASSETCHAINS_SYMBOL[0] != 0 || nHeight < 235300 || nHeight > 236000) && block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
     {
-        cout << block.nBits << " block.nBits vs. calc " << GetNextWorkRequired(pindexPrev, &block, consensusParams) << 
+        cout << block.nBits << " block.nBits vs. calc " << GetNextWorkRequired(pindexPrev, &block, consensusParams) <<
                                " for block #" << nHeight << endl;
         return state.DoS(100, error("%s: incorrect proof of work", __func__),
                         REJECT_INVALID, "bad-diffbits");

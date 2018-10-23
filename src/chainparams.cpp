@@ -80,9 +80,9 @@ void *chainparams_commandline(void *ptr);
 extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 extern uint16_t ASSETCHAINS_P2PPORT,ASSETCHAINS_RPCPORT;
 extern uint32_t ASSETCHAIN_INIT, ASSETCHAINS_MAGIC;
-extern int32_t VERUS_BLOCK_POSUNITS, ASSETCHAINS_LWMAPOS, ASSETCHAINS_SAPLING, ASSETCHAINS_OVERWINTER;
+extern int32_t BITSUM_BLOCK_POSUNITS, ASSETCHAINS_LWMAPOS, ASSETCHAINS_SAPLING, ASSETCHAINS_OVERWINTER;
 extern uint64_t ASSETCHAINS_SUPPLY, ASSETCHAINS_ALGO, ASSETCHAINS_EQUIHASH, ASSETCHAINS_VERUSHASH;
-extern std::string VERUS_CHEATCATCHER;
+extern std::string BITSUM_CHEATCATCHER;
 
 const arith_uint256 maxUint = UintToArith256(uint256S("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
 
@@ -92,8 +92,8 @@ public:
     {
         strNetworkID = "main";
         strCurrencyUnits = "KMD";
-        bip44CoinType = 133; // As registered in https://github.com/satoshilabs/slips/blob/master/slip-0044.md (ZCASH, should be VRSC)
-        consensus.fCoinbaseMustBeProtected = false; // true this is only true wuth Verus and enforced after block 12800
+        bip44CoinType = 133; // As registered in https://github.com/satoshilabs/slips/blob/master/slip-0044.md (ZCASH, should be SUM)
+        consensus.fCoinbaseMustBeProtected = false; // true this is only true wuth Bitsum and enforced after block 12800
         consensus.nSubsidySlowStartInterval = 20000;
         consensus.nSubsidyHalvingInterval = 840000;
         consensus.nMajorityEnforceBlockUpgrade = 750;
@@ -171,7 +171,7 @@ public:
         assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
         vFixedSeeds.clear();
         vSeeds.clear();
-        vSeeds.push_back(CDNSSeedData("veruscoin.io", "seeds.veruscoin.io")); // @kolo - old static dns seeds
+        vSeeds.push_back(CDNSSeedData("bitsum.io", "seeds.bitsum.io")); // @kolo - old static dns seeds
         vSeeds.push_back(CDNSSeedData("komodoplatform.com", "seeds.komodoplatform.com")); // @kolo - old static dns seeds
         vSeeds.push_back(CDNSSeedData("kolo.supernet.org", "static.kolo.supernet.org")); // @kolo - new static dns seeds ToDo
         vSeeds.push_back(CDNSSeedData("kolo.supernet.org", "dynamic.kolo.supernet.org")); // @kolo - crawler seeds ToDo
@@ -240,7 +240,7 @@ void *chainparams_commandline(void *ptr)
         if (ASSETCHAINS_ALGO != ASSETCHAINS_EQUIHASH)
         {
             // this is only good for 60 second blocks with an averaging window of 45. for other parameters, use:
-            // nLwmaAjustedWeight = (N+1)/2 * (0.9989^(500/nPowAveragingWindow)) * nPowTargetSpacing 
+            // nLwmaAjustedWeight = (N+1)/2 * (0.9989^(500/nPowAveragingWindow)) * nPowTargetSpacing
             mainParams.consensus.nLwmaAjustedWeight = 1350;
             mainParams.consensus.nPowAveragingWindow = 45;
             mainParams.consensus.powAlternate = uint256S("00000f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f");
@@ -252,14 +252,14 @@ void *chainparams_commandline(void *ptr)
             mainParams.consensus.nPOSAveragingWindow = 45;
             // spacing is 1000 units per block to get better resolution, POS is 50% hard coded for now, we can vary it later
             // when we get reliable integer math on nLwmaPOSAjustedWeight
-            mainParams.consensus.nPOSTargetSpacing = VERUS_BLOCK_POSUNITS * 2;
+            mainParams.consensus.nPOSTargetSpacing = BITSUM_BLOCK_POSUNITS * 2;
             // nLwmaPOSAjustedWeight = (N+1)/2 * (0.9989^(500/nPOSAveragingWindow)) * nPOSTargetSpacing
-            // this needs to be recalculated if VERUS_BLOCK_POSUNITS is changed
+            // this needs to be recalculated if BITSUM_BLOCK_POSUNITS is changed
             mainParams.consensus.nLwmaPOSAjustedWeight = 46531;
         }
 
-        // only require coinbase protection on Verus from the Komodo family of coins
-        if (strcmp(ASSETCHAINS_SYMBOL,"VRSC") == 0)
+        // only require coinbase protection on SUM from the Komodo family of coins
+        if (strcmp(ASSETCHAINS_SYMBOL,"SUM") == 0)
         {
             mainParams.consensus.vUpgrades[Consensus::UPGRADE_SAPLING].nActivationHeight = 227520;
             mainParams.consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nActivationHeight = 227520;
@@ -284,7 +284,7 @@ void *chainparams_commandline(void *ptr)
         }
         else
         {
-            if (strcmp(ASSETCHAINS_SYMBOL,"VRSCTEST") == 0 || strcmp(ASSETCHAINS_SYMBOL,"VERUSTEST") == 0)
+            if (strcmp(ASSETCHAINS_SYMBOL,"SUMTEST") == 0 || strcmp(ASSETCHAINS_SYMBOL,"BISTUMTEST") == 0)
             {
                 mainParams.consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000000000001f7e");
             }

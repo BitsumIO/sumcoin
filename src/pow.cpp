@@ -24,7 +24,7 @@ uint32_t komodo_chainactive_timestamp();
 
 extern uint32_t ASSETCHAINS_ALGO, ASSETCHAINS_EQUIHASH, ASSETCHAINS_STAKED, ASSETCHAINS_LWMAPOS;
 extern char ASSETCHAINS_SYMBOL[65];
-extern int32_t VERUS_BLOCK_POSUNITS, VERUS_CONSECUTIVE_POS_THRESHOLD, VERUS_NOPOS_THRESHHOLD;
+extern int32_t BITSUM_BLOCK_POSUNITS, BITSUM_CONSECUTIVE_POS_THRESHOLD, BITSUM_NOPOS_THRESHHOLD;
 unsigned int lwmaGetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params);
 unsigned int lwmaCalculateNextWorkRequired(const CBlockIndex* pindexLast, const Consensus::Params& params);
 
@@ -137,7 +137,7 @@ unsigned int lwmaCalculateNextWorkRequired(const CBlockIndex* pindexLast, const 
         t += solvetime * j;
 
         // Target sum divided by a factor, (k N^2).
-        // The factor is a part of the final equation. However we divide 
+        // The factor is a part of the final equation. However we divide
         // here to avoid potential overflow.
         bnTmp.SetCompact(pindexNext->nBits);
         sumTarget += bnTmp / (k * N * N);
@@ -202,16 +202,16 @@ uint32_t lwmaGetNextPOSRequired(const CBlockIndex* pindexLast, const Consensus::
     // if we have had no POS block in the threshold number of blocks, we must return the default, otherwise, we'll now have
     // a starting point
     uint32_t nBits = nProofOfStakeLimit;
-    for (int64_t i = 0; i < VERUS_NOPOS_THRESHHOLD; i++)
+    for (int64_t i = 0; i < BITSUM_NOPOS_THRESHHOLD; i++)
     {
         if (!pindexFirst)
             return nProofOfStakeLimit;
 
         CBlockHeader hdr = pindexFirst->GetBlockHeader();
 
-        if (hdr.IsVerusPOSBlock())
+        if (hdr.IsBitsumPOSBlock())
         {
-            nBits = hdr.GetVerusPOSTarget();
+            nBits = hdr.GetBitsumPOSTarget();
             break;
         }
         pindexFirst = pindexFirst->pprev;
@@ -223,10 +223,10 @@ uint32_t lwmaGetNextPOSRequired(const CBlockIndex* pindexLast, const Consensus::
 
     for (int64_t i = N - 1; i >= 0; i--)
     {
-        // we measure our solve time in passing of blocks, where one bock == VERUS_BLOCK_POSUNITS units
+        // we measure our solve time in passing of blocks, where one bock == BITSUM_BLOCK_POSUNITS units
         // consecutive blocks in either direction have their solve times exponentially multiplied or divided by power of 2
         int x;
-        for (x = 0; x < VERUS_CONSECUTIVE_POS_THRESHOLD; x++)
+        for (x = 0; x < BITSUM_CONSECUTIVE_POS_THRESHOLD; x++)
         {
             pindexFirst = pindexFirst->pprev;
 
@@ -234,9 +234,9 @@ uint32_t lwmaGetNextPOSRequired(const CBlockIndex* pindexLast, const Consensus::
                 return nProofOfStakeLimit;
 
             CBlockHeader hdr = pindexFirst->GetBlockHeader();
-            if (hdr.IsVerusPOSBlock())
+            if (hdr.IsBitsumPOSBlock())
             {
-                nBits = hdr.GetVerusPOSTarget();
+                nBits = hdr.GetBitsumPOSTarget();
                 break;
             }
         }
@@ -244,17 +244,17 @@ uint32_t lwmaGetNextPOSRequired(const CBlockIndex* pindexLast, const Consensus::
         if (x)
         {
             idx[i].consecutive = false;
-            if (!memcmp(ASSETCHAINS_SYMBOL, "VRSC", 4) && pindexLast->GetHeight() < 67680)
+            if (!memcmp(ASSETCHAINS_SYMBOL, "SUM", 4) && pindexLast->GetHeight() < 67680)
             {
-                idx[i].solveTime = VERUS_BLOCK_POSUNITS * (x + 1);
+                idx[i].solveTime = BITSUM_BLOCK_POSUNITS * (x + 1);
             }
             else
             {
                 int64_t lastSolveTime = 0;
-                idx[i].solveTime = VERUS_BLOCK_POSUNITS;
+                idx[i].solveTime = BITSUM_BLOCK_POSUNITS;
                 for (int64_t j = 0; j < x; j++)
                 {
-                    lastSolveTime = VERUS_BLOCK_POSUNITS + (lastSolveTime >> 1);
+                    lastSolveTime = BITSUM_BLOCK_POSUNITS + (lastSolveTime >> 1);
                     idx[i].solveTime += lastSolveTime;
                 }
             }
@@ -266,13 +266,13 @@ uint32_t lwmaGetNextPOSRequired(const CBlockIndex* pindexLast, const Consensus::
             idx[i].nBits = nBits;
             // go forward and halve the minimum solve time for all consecutive blocks in this run, to get here, our last block is POS,
             // and if there is no POS block in front of it, it gets the normal solve time of one block
-            uint32_t st = VERUS_BLOCK_POSUNITS;
+            uint32_t st = BITSUM_BLOCK_POSUNITS;
             for (int64_t j = i; j < N; j++)
             {
                 if (idx[j].consecutive == true)
                 {
                     idx[j].solveTime = st;
-                    if ((j - i) >= VERUS_CONSECUTIVE_POS_THRESHOLD)
+                    if ((j - i) >= BITSUM_CONSECUTIVE_POS_THRESHOLD)
                     {
                         // if this is real time, return zero
                         if (j == (N - 1))
@@ -290,13 +290,13 @@ uint32_t lwmaGetNextPOSRequired(const CBlockIndex* pindexLast, const Consensus::
         }
     }
 
-    for (int64_t i = N - 1; i >= 0; i--) 
+    for (int64_t i = N - 1; i >= 0; i--)
     {
         // weighted sum
         t += idx[i].solveTime * i;
 
         // Target sum divided by a factor, (k N^2).
-        // The factor is a part of the final equation. However we divide 
+        // The factor is a part of the final equation. However we divide
         // here to avoid potential overflow.
         bnTmp.SetCompact(idx[i].nBits);
         sumTarget += bnTmp / (k * N * N);
@@ -424,7 +424,7 @@ bool CheckProofOfWork(const CBlockHeader &blkHeader, uint8_t *pubkey33, int32_t 
         bnTarget.SetCompact(KOMODO_MINDIFF_NBITS,&fNegative,&fOverflow);
     }
     // Check proof of work matches claimed amount
-    if ( UintToArith256(hash = blkHeader.GetHash()) > bnTarget && !blkHeader.IsVerusPOSBlock() )
+    if ( UintToArith256(hash = blkHeader.GetHash()) > bnTarget && !blkHeader.IsBitsumPOSBlock() )
     {
         if ( KOMODO_LOADINGBLOCKS != 0 )
             return true;
@@ -473,13 +473,13 @@ CChainPower GetBlockProof(const CBlockIndex& block)
     CBlockHeader header = block.GetBlockHeader();
 
     // if POS block, add stake
-    if (!NetworkUpgradeActive(block.GetHeight(), Params().GetConsensus(), Consensus::UPGRADE_SAPLING) || !header.IsVerusPOSBlock())
+    if (!NetworkUpgradeActive(block.GetHeight(), Params().GetConsensus(), Consensus::UPGRADE_SAPLING) || !header.IsBitsumPOSBlock())
     {
         return CChainPower(0, bnStakeTarget, (~bnWorkTarget / (bnWorkTarget + 1)) + 1);
     }
     else
     {
-        bnStakeTarget.SetCompact(header.GetVerusPOSTarget(), &fNegative, &fOverflow);
+        bnStakeTarget.SetCompact(header.GetBitsumPOSTarget(), &fNegative, &fOverflow);
         if (fNegative || fOverflow || bnStakeTarget == 0)
             return CChainPower(0);
         // as the nonce has a fixed definition for a POS block, add the random amount of "work" from the nonce, so there will

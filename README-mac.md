@@ -28,7 +28,7 @@ cd sumcoin
 ./zcutil/fetch-params.sh
 ```
 
-To build a distributable version of sumcoin then run the makeReleaseMac.sh script after building. This will fix the dependency references and move the komodod and komodo-cli binaries to the kmd/mac/verus-cli directory along with the 6 libraries required for it to work properly.
+To build a distributable version of sumcoin then run the makeReleaseMac.sh script after building. This will fix the dependency references and move the komodod and komodo-cli binaries to the kmd/mac/bitsum-cli directory along with the 6 libraries required for it to work properly.
 
 When you are done building, you need to create `Komodo.conf` the Mac way.
 

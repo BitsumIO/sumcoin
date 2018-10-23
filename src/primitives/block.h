@@ -95,7 +95,7 @@ public:
         return (int64_t)nTime;
     }
 
-    uint32_t GetVerusPOSTarget() const
+    uint32_t GetBitsumPOSTarget() const
     {
         uint32_t nBits = 0;
 
@@ -107,12 +107,12 @@ public:
         return nBits;
     }
 
-    bool IsVerusPOSBlock() const
+    bool IsBitsumPOSBlock() const
     {
         return nNonce.IsPOSNonce();
     }
 
-    void SetVerusPOSTarget(uint32_t nBits)
+    void SetBitsumPOSTarget(uint32_t nBits)
     {
         CVerusHashWriter hashWriter = CVerusHashWriter(SER_GETHASH, PROTOCOL_VERSION);
 

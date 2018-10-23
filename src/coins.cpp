@@ -557,7 +557,7 @@ extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 const CScript &CCoinsViewCache::GetSpendFor(const CCoins *coins, const CTxIn& input)
 {
     assert(coins);
-    if (coins->nHeight < 6400 && !strcmp(ASSETCHAINS_SYMBOL, "VRSC"))
+    if (coins->nHeight < 6400 && !strcmp(ASSETCHAINS_SYMBOL, "SUM"))
     {
         std::string hc = input.prevout.hash.ToString();
         if (LaunchMap().lmap.count(hc))

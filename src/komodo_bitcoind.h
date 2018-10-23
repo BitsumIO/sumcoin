@@ -1462,7 +1462,7 @@ bool ValidateMatchingStake(const CTransaction &ccTx, uint32_t voutNum, const CTr
 bool ValidateStakeTransaction(const CTransaction &stakeTx, CStakeParams &stakeParams, bool validateSig = true);
 
 // for now, we will ignore slowFlag in the interest of keeping success/fail simpler for security purposes
-bool verusCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
+bool bitsumCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
 {
     CBlockIndex *pastBlockIndex;
     uint256 txid, blkHash;
@@ -1474,7 +1474,7 @@ bool verusCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
     arith_uint256 target, hash;
     CTransaction tx;
 
-    if (!pblock->IsVerusPOSBlock())
+    if (!pblock->IsBitsumPOSBlock())
     {
         printf("%s, height %d not POS block\n", pblock->nNonce.GetHex().c_str(), height);
         //pblock->nNonce.SetPOSTarget(pblock->nNonce.GetPOSTarget());
@@ -1488,7 +1488,7 @@ bool verusCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
 
     if ( txn_count > 1 )
     {
-        target.SetCompact(pblock->GetVerusPOSTarget());
+        target.SetCompact(pblock->GetBitsumPOSTarget());
         txid = pblock->vtx[txn_count-1].vin[0].prevout.hash;
         voutNum = pblock->vtx[txn_count-1].vin[0].prevout.n;
         value = pblock->vtx[txn_count-1].vout[0].nValue;
@@ -1544,7 +1544,7 @@ bool verusCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
                 {
                     fprintf(stderr,"ERROR: chain not fully loaded or invalid PoS block %s - no past block found\n",blkHash.ToString().c_str());
                 }
-                else 
+                else
 #ifndef KOMODO_ZCASH
                 if (!GetTransaction(txid, tx, Params().GetConsensus(), blkHash, true))
 #else
@@ -1577,8 +1577,8 @@ bool verusCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
                     {
                         BlockMap::const_iterator it = mapBlockIndex.find(blkHash);
                         if ((it == mapBlockIndex.end()) ||
-                            !(pastBlockIndex = it->second) || 
-                            (height - pastBlockIndex->GetHeight()) < VERUS_MIN_STAKEAGE)
+                            !(pastBlockIndex = it->second) ||
+                            (height - pastBlockIndex->GetHeight()) < BITSUM_MIN_STAKEAGE)
                         {
                             fprintf(stderr,"ERROR: invalid PoS block %s - stake source too new or not found\n",blkHash.ToString().c_str());
                         }
@@ -1643,9 +1643,9 @@ bool verusCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
                                                     std::vector<std::vector<unsigned char>> vvch = std::vector<std::vector<unsigned char>>();
                                                     // solve all outputs to check that destinations all go only to the pk
                                                     // specified in the stake params
-                                                    if (!Solver(vout.scriptPubKey, tp, vvch) || 
-                                                        tp != TX_CRYPTOCONDITION || 
-                                                        vvch.size() < 2 || 
+                                                    if (!Solver(vout.scriptPubKey, tp, vvch) ||
+                                                        tp != TX_CRYPTOCONDITION ||
+                                                        vvch.size() < 2 ||
                                                         p.pk != CPubKey(vvch[1]))
                                                     {
                                                         isPOS = false;
@@ -1734,7 +1734,7 @@ int32_t komodo_checkPOW(int32_t slowflag,CBlock *pblock,int32_t height)
     if ( ASSETCHAINS_LWMAPOS != 0 && bhash > bnTarget )
     {
         // if proof of stake is active, check if this is a valid PoS block before we fail
-        if (verusCheckPOSBlock(slowflag, pblock, height))
+        if (bitsumCheckPOSBlock(slowflag, pblock, height))
         {
             return(0);
         }

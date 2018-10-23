@@ -1025,7 +1025,7 @@ int32_t komodo_opreturnscript(uint8_t *script,uint8_t type,uint8_t *opret,int32_
 // from all other blocks. the sequence is extremely likely, but not guaranteed to be unique for each block chain
 uint64_t komodo_block_prg(uint32_t nHeight)
 {
-    if (strcmp(ASSETCHAINS_SYMBOL, "VRSC") != 0 || nHeight >= 12800)
+    if (strcmp(ASSETCHAINS_SYMBOL, "SUM") != 0 || nHeight >= 12800)
     {
         uint64_t i, result = 0, hashSrc64 = ((uint64_t)ASSETCHAINS_MAGIC << 32) | (uint64_t)nHeight;
         uint8_t hashSrc[8];
@@ -1077,7 +1077,7 @@ int64_t komodo_block_unlocktime(uint32_t nHeight)
         unlocktime = ASSETCHAINS_TIMEUNLOCKTO;
     else
     {
-        if (strcmp(ASSETCHAINS_SYMBOL, "VRSC") != 0 || nHeight >= 12800)
+        if (strcmp(ASSETCHAINS_SYMBOL, "SUM") != 0 || nHeight >= 12800)
         {
             unlocktime = komodo_block_prg(nHeight) % (ASSETCHAINS_TIMEUNLOCKTO - ASSETCHAINS_TIMEUNLOCKFROM);
             unlocktime += ASSETCHAINS_TIMEUNLOCKFROM;
@@ -1645,7 +1645,7 @@ uint64_t komodo_ac_block_subsidy(int nHeight)
 }
 
 extern int64_t MAX_MONEY;
-extern std::string VERUS_CHEATCATCHER;
+extern std::string BITSUM_CHEATCATCHER;
 
 void komodo_args(char *argv0)
 {
@@ -1661,9 +1661,9 @@ void komodo_args(char *argv0)
     }
     else KOMODO_MININGTHREADS = 0;
 
-    VERUS_MINTBLOCKS = GetBoolArg("-mint", false);
+    BITSUM_MINTBLOCKS = GetBoolArg("-mint", false);
 
-    VERUS_CHEATCATCHER = GetArg("-cheatcatcher", "");
+    BITSUM_CHEATCATCHER = GetArg("-cheatcatcher", "");
 
     if ( (KOMODO_EXCHANGEWALLET= GetBoolArg("-exchange", false)) != 0 )
         fprintf(stderr,"KOMODO_EXCHANGEWALLET mode active\n");
@@ -1774,7 +1774,7 @@ void komodo_args(char *argv0)
 
         // for now, we only support 50% PoS due to other parts of the algorithm needing adjustment for
         // other values
-        if ( (ASSETCHAINS_LWMAPOS = GetArg("-ac_veruspos",0)) != 0 )
+        if ( (ASSETCHAINS_LWMAPOS = GetArg("-ac_sumpos",0)) != 0 )
             ASSETCHAINS_LWMAPOS = 50;
         
         ASSETCHAINS_SAPLING = GetArg("-ac_sapling", -1);

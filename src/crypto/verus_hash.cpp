@@ -1,11 +1,12 @@
 // (C) 2018 The Verus Developers
+// (C) 2018 The BitSUM Developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 /*
-This provides the PoW hash function for Verus, a CPU-optimized hash 
-function with a Haraka V2 core. Unlike Haraka, which is made for short 
-inputs only, Verus Hash takes any length of input and produces a 256 
+This provides the PoW hash function for Bitsum, a CPU-optimized hash
+function with a Haraka V2 core. Unlike Haraka, which is made for short
+inputs only, Verus Hash takes any length of input and produces a 256
 bit output.
 */
 #include <string.h>

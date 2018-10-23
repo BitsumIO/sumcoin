@@ -126,12 +126,12 @@ d) resume sync till it gets to chaintip
 
 For example:
 ```shell
-./verusd -exportdir=/tmp &
-./verus dumpwallet example
-./verus stop
+./bitsumd -exportdir=/tmp &
+./bitsum dumpwallet example
+./bitsum stop
 mv ~/.komodo/SUM ~/.komodo/SUM.old && mkdir ~/.komodo/SUM && cp ~/.komodo/SUM.old/SUM.conf ~/.komodo/SUM.old/peers.dat ~/.komodo/SUM
-./verusd -exchange -exportdir=/tmp &
-./verus importwallet /tmp/example
+./bitsumd -exchange -exportdir=/tmp &
+./bitsum importwallet /tmp/example
 ```
 ---
 

@@ -1,17 +1,17 @@
 #!/bin/sh
 
-KMD_DIR=verus-cli
+KMD_DIR=bitsum-cli
 mkdir ${KMD_DIR}
 
-cp src/verus \
-   src/verusd \
-   doc/man/verus-cli/mac/README.txt \
+cp src/bitsum \
+   src/bitsumd \
+   doc/man/bitsum-cli/mac/README.txt \
    zcutil/fetch-params.sh \
-   verus-cli
-mv verus-cli/fetch-params.sh verus-cli/fetch-params
+   bitsum-cli
+mv bitsum-cli/fetch-params.sh bitsum-cli/fetch-params
 chmod +x ${KMD_DIR}/fetch-params
-chmod +x ${KMD_DIR}/verus
-chmod +x ${KMD_DIR}/verusd
+chmod +x ${KMD_DIR}/bitsum
+chmod +x ${KMD_DIR}/bitsumd
 
 binaries=("komodo-cli" "komodod")
 alllibs=()
