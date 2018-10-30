@@ -303,14 +303,6 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
                                 tb.AddOpRet(mtx.vout[mtx.vout.size() - 1].scriptPubKey);
 
                                 cheatSpend = tb.Build();
-                                if (cheatSpend)
-                                {
-                                    cheatTx = boost::get<CTransaction>(cheatSpend);
-                                    unsigned int nTxSize = ::GetSerializeSize(cheatTx, SER_NETWORK, PROTOCOL_VERSION);
-                                    double dPriority = cheatTx.ComputePriority(dPriority, nTxSize);
-                                    CFeeRate feeRate(DEFAULT_TRANSACTION_MAXFEE, nTxSize);
-                                    vecPriority.push_back(TxPriority(dPriority, feeRate, &cheatTx));
-                                }
                             }
                         }
                     }
@@ -320,10 +312,17 @@ CBlockTemplate* CreateNewBlock(const CScript& _scriptPubKeyIn, int32_t gpucount,
 
         if (cheatSpend)
         {
+            cheatTx = cheatSpend.value();
             std::list<CTransaction> removed;
-            mempool.removeConflicts(cheatSpend.value(), removed);
+            mempool.removeConflicts(cheatTx, removed);
             printf("Found cheating stake! Adding cheat spend for %.8f at block #%d, coinbase tx\n%s\n",
                 (double)cb.GetValueOut() / (double)COIN, nHeight, cheatSpend.value().vin[0].prevout.hash.GetHex().c_str());
+
+            // add to mem pool and relay
+            if (myAddtomempool(cheatTx))
+            {
+                RelayTransaction(cheatTx);
+            }
         }
 
         // now add transactions from the mem pool
@@ -1123,7 +1122,7 @@ void static BitsumStaker(CWallet *pwallet)
             pindexPrev = get_chainactive(Mining_height - 100);
             CTransaction &sTx = pblock->vtx[pblock->vtx.size()-1];
             printf("POS hash: %s  \ntarget:   %s\n",
-                CTransaction::_GetVerusPOSHash(&(pblock->nNonce), sTx.vin[0].prevout.hash, sTx.vin[0].prevout.n, Mining_height, pindexPrev->GetBlockHeader().GetVerusEntropyHash(Mining_height - 100), sTx.vout[0].nValue).GetHex().c_str(), ArithToUint256(post).GetHex().c_str());
+                CTransaction::_GetBitsumPOSHash(&(pblock->nNonce), sTx.vin[0].prevout.hash, sTx.vin[0].prevout.n, Mining_height, pindexPrev->GetBlockHeader().GetBitsumEntropyHash(Mining_height - 100), sTx.vout[0].nValue).GetHex().c_str(), ArithToUint256(post).GetHex().c_str());
             if (unlockTime > Mining_height && subsidy >= ASSETCHAINS_TIMELOCKGTE)
                 printf("- timelocked until block %i\n", unlockTime);
             else

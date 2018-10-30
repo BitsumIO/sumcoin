@@ -3,7 +3,7 @@
 KMD_DIR=bitsum-cli
 mkdir ${KMD_DIR}
 
-cp src/bitsum \
+cp src/fiat/bitsum \
    src/bitsumd \
    doc/man/bitsum-cli/mac/README.txt \
    zcutil/fetch-params.sh \

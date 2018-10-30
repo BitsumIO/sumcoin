@@ -1661,8 +1661,6 @@ void komodo_args(char *argv0)
     }
     else KOMODO_MININGTHREADS = 0;
 
-    BITSUM_MINTBLOCKS = GetBoolArg("-mint", false);
-
     BITSUM_CHEATCATCHER = GetArg("-cheatcatcher", "");
 
     if ( (KOMODO_EXCHANGEWALLET= GetBoolArg("-exchange", false)) != 0 )

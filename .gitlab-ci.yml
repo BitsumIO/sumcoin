@@ -39,7 +39,7 @@ build:linux:
   - mkdir bitsum-cli
   - cp src/komodod
       src/komodo-cli
-      src/bitsum
+      src/fiat/bitsum
       src/bitsumd
       doc/man/bitsum-cli/linux/README.txt
       zcutil/fetch-params.sh
@@ -50,6 +50,7 @@ build:linux:
   - chmod +x bitsum-cli/bitsum
   - chmod +x bitsum-cli/bitsumd
   - chmod +x bitsum-cli/fetch-params
+  - if [ "${CI_COMMIT_REF_NAME}" = "master" ]; then strip -g bitsum-cli/komodod && strip -g bitsum-cli/komodod; fi
   - tar -czvf ${BITSUM_CLI_LINUX} bitsum-cli
   - md5sum ${BITSUM_CLI_LINUX} > ${BITSUM_CLI_LINUX}.md5
   - curl -F file=@"${BITSUM_CLI_LINUX}"
@@ -82,6 +83,8 @@ build:windows:
   - cp src/komodod.exe
       src/komodo-cli.exe
       src/komodo-tx.exe
+      src/fiat/bitsum.bat
+      src/bitsumd.bat
       doc/man/bitsum-cli/windows/README.txt
       zcutil/fetch-params.bat
       zcutil/wget64.exe

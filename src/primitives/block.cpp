@@ -49,7 +49,7 @@ void CBlockHeader::SetVerusHash()
 // if it returns false, value is set to 0, but it can still be calculated from the full block
 // in that case. the only difference between this and the POS hash for the contest is that it is not divided by the value out
 // this is used as a source of entropy
-bool CBlockHeader::GetRawVerusPOSHash(uint256 &ret, int32_t nHeight) const
+bool CBlockHeader::GetRawBitsumPOSHash(uint256 &ret, int32_t nHeight) const
 {
     // if below the required height or no storage space in the solution, we can't get
     // a cached txid value to calculate the POSHash from the header
@@ -78,10 +78,10 @@ bool CBlockHeader::GetRawVerusPOSHash(uint256 &ret, int32_t nHeight) const
     return true;
 }
 
-bool CBlockHeader::GetVerusPOSHash(arith_uint256 &ret, int32_t nHeight, CAmount value) const
+bool CBlockHeader::GetBitsumPOSHash(arith_uint256 &ret, int32_t nHeight, CAmount value) const
 {
     uint256 raw;
-    if (GetRawVerusPOSHash(raw, nHeight))
+    if (GetRawBitsumPOSHash(raw, nHeight))
     {
         ret = UintToArith256(raw) / value;
         return true;
@@ -90,11 +90,11 @@ bool CBlockHeader::GetVerusPOSHash(arith_uint256 &ret, int32_t nHeight, CAmount 
 }
 
 // depending on the height of the block and its type, this returns the POS hash or the POW hash
-uint256 CBlockHeader::GetVerusEntropyHash(int32_t height) const
+uint256 CBlockHeader::GetBitsumEntropyHash(int32_t height) const
 {
     uint256 retVal;
     // if we qualify as PoW, use PoW hash, regardless of PoS state
-    if (GetRawVerusPOSHash(retVal, height))
+    if (GetRawBitsumPOSHash(retVal, height))
     {
         // POS hash
         return retVal;

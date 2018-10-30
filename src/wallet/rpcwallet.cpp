@@ -2909,17 +2909,17 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
     UniValue results(UniValue::VARR);
 
     if (zaddrs.size() > 0) {
-        std::vector<CUnspentSproutNotePlaintextEntry> sproutEntries;
-        std::vector<UnspentSaplingNoteEntry> saplingEntries;
-        pwalletMain->GetUnspentFilteredNotes(sproutEntries, saplingEntries, zaddrs, nMinDepth, nMaxDepth, !fIncludeWatchonly);
+        std::vector<CSproutNotePlaintextEntry> sproutEntries;
+        std::vector<SaplingNoteEntry> saplingEntries;
+        pwalletMain->GetFilteredNotes(sproutEntries, saplingEntries, zaddrs, nMinDepth, nMaxDepth, true, !fIncludeWatchonly, false);
         std::set<std::pair<PaymentAddress, uint256>> nullifierSet = pwalletMain->GetNullifiersForAddresses(zaddrs);
         
-        for (CUnspentSproutNotePlaintextEntry & entry : sproutEntries) {
+        for (auto & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
             obj.push_back(Pair("jsindex", (int)entry.jsop.js ));
             obj.push_back(Pair("jsoutindex", (int)entry.jsop.n));
-            obj.push_back(Pair("confirmations", entry.nHeight));
+            obj.push_back(Pair("confirmations", entry.confirmations));
             bool hasSproutSpendingKey = pwalletMain->HaveSproutSpendingKey(boost::get<libzcash::SproutPaymentAddress>(entry.address));
             obj.push_back(Pair("spendable", hasSproutSpendingKey));
             obj.push_back(Pair("address", EncodePaymentAddress(entry.address)));
@@ -2932,11 +2932,11 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
             results.push_back(obj);
         }
         
-        for (UnspentSaplingNoteEntry & entry : saplingEntries) {
+        for (auto & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
             obj.push_back(Pair("outindex", (int)entry.op.n));
-            obj.push_back(Pair("confirmations", entry.nHeight));
+            obj.push_back(Pair("confirmations", entry.confirmations));
             libzcash::SaplingIncomingViewingKey ivk;
             libzcash::SaplingFullViewingKey fvk;
             pwalletMain->GetSaplingIncomingViewingKey(boost::get<libzcash::SaplingPaymentAddress>(entry.address), ivk);
@@ -3143,6 +3143,14 @@ UniValue zc_benchmark(const UniValue& params, bool fHelp)
             sample_times.push_back(benchmark_loadwallet());
         } else if (benchmarktype == "listunspent") {
             sample_times.push_back(benchmark_listunspent());
+        } else if (benchmarktype == "createsaplingspend") {
+            sample_times.push_back(benchmark_create_sapling_spend());
+        } else if (benchmarktype == "createsaplingoutput") {
+            sample_times.push_back(benchmark_create_sapling_output());
+        } else if (benchmarktype == "verifysaplingspend") {
+            sample_times.push_back(benchmark_verify_sapling_spend());
+        } else if (benchmarktype == "verifysaplingoutput") {
+            sample_times.push_back(benchmark_verify_sapling_output());
         } else {
             throw JSONRPCError(RPC_TYPE_ERROR, "Invalid benchmarktype");
         }
@@ -4462,7 +4470,8 @@ UniValue z_shieldcoinbase(const UniValue& params, bool fHelp)
     // (used if no Sapling addresses are involved)
     CMutableTransaction contextualTx = CreateNewContextualCMutableTransaction(
         Params().GetConsensus(), nextBlockHeight);
-    contextualTx.nLockTime = blockHeight;
+    contextualTx.nLockTime = nextBlockHeight;
+
     if (contextualTx.nVersion == 1) {
         contextualTx.nVersion = 2; // Tx format should support vjoinsplits
     }
@@ -6735,8 +6744,9 @@ UniValue getbalance64(const UniValue& params, bool fHelp)
     UniValue ret(UniValue::VOBJ); UniValue a(UniValue::VARR),b(UniValue::VARR); CTxDestination address;
     const CKeyStore& keystore = *pwalletMain;
     CAmount nValues[64],nValues2[64],nValue,total,total2; int32_t i,segid;
-    assert(pwalletMain != NULL);
-    if (fHelp || params.size() > 0)
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+    if (params.size() > 0)
         throw runtime_error("getbalance64\n");
     total = total2 = 0;
     memset(nValues,0,sizeof(nValues));

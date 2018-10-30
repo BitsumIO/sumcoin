@@ -1502,7 +1502,7 @@ bool bitsumCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
 
             if (validHash && newPOSEnforcement)
             {
-                validHash = pblock->GetRawVerusPOSHash(rawHash, height);
+                validHash = pblock->GetRawBitsumPOSHash(rawHash, height);
                 posHash = UintToArith256(rawHash) / value;
                 if (!validHash || posHash > target)
                 {
@@ -1556,7 +1556,7 @@ bool bitsumCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
                 else
                 {
                     CBlockHeader bh = pastBlockIndex->GetBlockHeader();
-                    uint256 pastHash = bh.GetVerusEntropyHash(height - 100);
+                    uint256 pastHash = bh.GetBitsumEntropyHash(height - 100);
 
                     // if height is over when Nonce is required to be the new format, we check that the new format is correct
                     // if over when we have the new POS hash function, we validate that as well
@@ -1564,11 +1564,11 @@ bool bitsumCheckPOSBlock(int32_t slowflag, CBlock *pblock, int32_t height)
                     CPOSNonce nonce = pblock->nNonce;
 
                     //printf("before nNonce: %s, height: %d\n", pblock->nNonce.GetHex().c_str(), height);
-                    //validHash = pblock->GetRawVerusPOSHash(rawHash, height);
+                    //validHash = pblock->GetRawBitsumPOSHash(rawHash, height);
                     //hash = UintToArith256(rawHash) / tx.vout[voutNum].nValue;
                     //printf("Raw POShash:   %s\n", hash.GetHex().c_str());
 
-                    hash = UintToArith256(tx.GetVerusPOSHash(&nonce, voutNum, height, pastHash));
+                    hash = UintToArith256(tx.GetBitsumPOSHash(&nonce, voutNum, height, pastHash));
 
                     //printf("after nNonce:  %s, height: %d\n", nonce.GetHex().c_str(), height);
                     //printf("POShash:       %s\n\n", hash.GetHex().c_str());

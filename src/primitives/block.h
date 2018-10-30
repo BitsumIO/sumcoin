@@ -84,9 +84,9 @@ public:
     uint256 GetVerusHash() const;
     static void SetVerusHash();
 
-    bool GetRawVerusPOSHash(uint256 &ret, int32_t nHeight) const;
-    bool GetVerusPOSHash(arith_uint256 &ret, int32_t nHeight, CAmount value) const; // value is amount of stake tx
-    uint256 GetVerusEntropyHash(int32_t nHeight) const;
+    bool GetRawBitsumPOSHash(uint256 &ret, int32_t nHeight) const;
+    bool GetBitsumPOSHash(arith_uint256 &ret, int32_t nHeight, CAmount value) const; // value is amount of stake tx
+    uint256 GetBitsumEntropyHash(int32_t nHeight) const;
 
     uint256 GetVerusV2Hash() const;
 
